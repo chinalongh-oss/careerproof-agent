@@ -28,4 +28,4 @@ BEGIN
 END $$;
 
 ALTER TABLE candidate_profiles
-    ADD CONSTRAINT candidate_profiles_case_id_unique UNIQUE (case_id);
+    ADD CONSTRAINT IF NOT EXISTS candidate_profiles_case_id_unique UNIQUE (case_id);
