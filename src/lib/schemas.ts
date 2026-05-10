@@ -14,10 +14,10 @@ export const ResumeParseSchema = z.looseObject({
       team_size: z.union([z.string(), z.number()]).optional(),
     })
   ).optional(),
-  skills: z.record(z.string(), z.unknown()).optional(),
-  metrics: z.record(z.string(), z.unknown()).optional(),
-  strong_claims: z.record(z.string(), z.unknown()).optional(),
-  missing_info: z.array(z.string()).optional(),
+  skills: z.unknown().optional(),
+  metrics: z.unknown().optional(),
+  strong_claims: z.unknown().optional(),
+  missing_info: z.unknown().optional(),
 })
 
 export type ResumeParseOutput = z.infer<typeof ResumeParseSchema>
