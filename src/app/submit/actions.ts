@@ -69,7 +69,8 @@ export async function submitCaseAction(formData: FormData) {
       .insert(docsToInsert)
 
     if (docError) {
-      return { success: false, error: `保存文档失败：${docError.message}` }
+      await serviceClient.from("cases").delete().eq("id", caseId)
+      return { success: false, error: `保存文档失败，已回滚案例：${caseId}，错误：${docError.message}` }
     }
   } catch (e) {
     return { success: false, error: `提交异常：${e instanceof Error ? e.message : String(e)}` }

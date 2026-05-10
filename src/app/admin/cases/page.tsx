@@ -40,6 +40,13 @@ export default async function AdminCasesPage() {
         </Link>
       </div>
 
+      <div className="rounded-lg border p-3 bg-muted/30 text-xs text-muted-foreground space-y-1">
+        <p>
+          查询结果：{error ? "失败" : `共 ${Array.isArray(cases) ? cases.length : 0} 条案例`}
+        </p>
+        {error && <p className="text-destructive">{error.message}</p>}
+      </div>
+
       <div className="rounded-lg border">
         <div className="grid grid-cols-7 gap-4 p-4 text-sm font-medium text-muted-foreground border-b">
           <div>候选人</div>
@@ -51,7 +58,15 @@ export default async function AdminCasesPage() {
           <div className="text-right">操作</div>
         </div>
 
-        {error || !cases || (Array.isArray(cases) && cases.length === 0) ? (
+        {error ? (
+          <div className="p-12 text-center">
+            <p className="text-destructive font-semibold mb-2">案例列表查询失败</p>
+            <p className="text-sm text-muted-foreground mb-1">{error.message}</p>
+            {error.code && <p className="text-xs text-muted-foreground">code: {error.code}</p>}
+            {error.details && <p className="text-xs text-muted-foreground">details: {error.details}</p>}
+            {error.hint && <p className="text-xs text-muted-foreground">hint: {error.hint}</p>}
+          </div>
+        ) : !cases || (Array.isArray(cases) && cases.length === 0) ? (
           <div className="p-12 text-center text-muted-foreground">
             <p className="mb-2">暂无案例</p>
             <p className="text-sm">
