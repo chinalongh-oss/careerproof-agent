@@ -18,13 +18,13 @@ BEGIN
     -- Any failure will rollback everything
 
     -- 1. Delete all existing project_cards for this case_id
-    DELETE FROM project_cards
+    DELETE FROM public.project_cards
     WHERE case_id = p_case_id;
 
     -- 2. Insert new project_cards
     FOR card IN SELECT * FROM jsonb_array_elements(p_cards)
     LOOP
-        INSERT INTO project_cards (
+        INSERT INTO public.project_cards (
             case_id,
             project_name,
             business_context,
@@ -67,7 +67,7 @@ BEGIN
     END LOOP;
 
     -- 3. Update case status to evidence_ready
-    UPDATE cases
+    UPDATE public.cases
     SET status = 'evidence_ready', updated_at = now()
     WHERE id = p_case_id;
 
