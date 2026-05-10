@@ -1,6 +1,7 @@
 "use server"
 
 import { redirect } from "next/navigation"
+import { revalidatePath } from "next/cache"
 import { serviceClient } from "@/lib/supabase/service"
 
 export async function submitCaseAction(formData: FormData) {
@@ -74,5 +75,6 @@ export async function submitCaseAction(formData: FormData) {
     return { success: false, error: `提交异常：${e instanceof Error ? e.message : String(e)}` }
   }
 
+  revalidatePath("/admin/cases")
   redirect("/submit/success")
 }
