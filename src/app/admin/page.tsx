@@ -2,8 +2,25 @@ import Link from "next/link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { ArrowRight, FolderOpen } from "lucide-react"
+import { serviceClient } from "@/lib/supabase/service"
 
-export default function AdminPage() {
+export const dynamic = "force-dynamic"
+
+export default async function AdminPage() {
+  const { count: total } = await serviceClient
+    .from("cases")
+    .select("*", { count: "exact", head: true })
+
+  const { count: inProgress } = await serviceClient
+    .from("cases")
+    .select("*", { count: "exact", head: true })
+    .not("status", "in", '("delivered","failed")')
+
+  const { count: completed } = await serviceClient
+    .from("cases")
+    .select("*", { count: "exact", head: true })
+    .eq("status", "delivered")
+
   return (
     <div className="space-y-6">
       <div>
@@ -21,7 +38,7 @@ export default function AdminPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold">0</div>
+            <div className="text-3xl font-bold">{total ?? 0}</div>
           </CardContent>
         </Card>
         <Card>
@@ -31,7 +48,7 @@ export default function AdminPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold">0</div>
+            <div className="text-3xl font-bold">{inProgress ?? 0}</div>
           </CardContent>
         </Card>
         <Card>
@@ -41,7 +58,7 @@ export default function AdminPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold">0</div>
+            <div className="text-3xl font-bold">{completed ?? 0}</div>
           </CardContent>
         </Card>
       </div>

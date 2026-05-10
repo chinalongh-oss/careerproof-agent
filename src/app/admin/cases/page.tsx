@@ -18,6 +18,8 @@ const statusMap = {
   failed: { label: "失败", variant: "outline" },
 } as const satisfies Record<CaseStatus, { label: string; variant: "default" | "secondary" | "outline" }>
 
+export const dynamic = "force-dynamic"
+
 export default async function AdminCasesPage() {
   const { data: cases, error } = await serviceClient
     .from("cases")
