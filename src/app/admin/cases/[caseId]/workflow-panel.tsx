@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
@@ -20,6 +21,11 @@ import {
 import {
   parseResumeAction,
   buildProjectCardsAction,
+  parseJDAction,
+  generateFingerprintAction,
+  generatePositioningsAction,
+  generateOutputsAction,
+  auditRisksAction,
 } from "./actions"
 
 const actions = [
@@ -39,9 +45,15 @@ const statusOrder = [
 ]
 
 export function WorkflowPanel({ caseId, currentStatus }: { caseId: string; currentStatus: string }) {
+  const router = useRouter()
   const currentIdx = statusOrder.indexOf(currentStatus)
   const [parsePending, setParsePending] = useState(false)
   const [evidencePending, setEvidencePending] = useState(false)
+  const [jdPending, setJdPending] = useState(false)
+  const [fpPending, setFpPending] = useState(false)
+  const [posPending, setPosPending] = useState(false)
+  const [outputsPending, setOutputsPending] = useState(false)
+  const [riskPending, setRiskPending] = useState(false)
 
   function isAvailable(requires: string) {
     if (currentIdx < 0) return false
@@ -81,6 +93,86 @@ export function WorkflowPanel({ caseId, currentStatus }: { caseId: string; curre
     }
   }
 
+  async function handleParseJD() {
+    setJdPending(true)
+    try {
+      const result = await parseJDAction(caseId)
+      if (result.success) {
+        toast.success(result.message || "JD 解析完成")
+      } else {
+        toast.error(result.error || "JD 解析失败")
+      }
+    } catch (e) {
+      toast.error(`解析异常：${e instanceof Error ? e.message : String(e)}`)
+    } finally {
+      setJdPending(false)
+    }
+  }
+
+  async function handleGenerateFingerprint() {
+    setFpPending(true)
+    try {
+      const result = await generateFingerprintAction(caseId)
+      if (result.success) {
+        toast.success(result.message || "职业指纹生成完成")
+      } else {
+        toast.error(result.error || "职业指纹生成失败")
+      }
+    } catch (e) {
+      toast.error(`生成异常：${e instanceof Error ? e.message : String(e)}`)
+    } finally {
+      setFpPending(false)
+    }
+  }
+
+  async function handleGeneratePositioning() {
+    setPosPending(true)
+    try {
+      const result = await generatePositioningsAction(caseId)
+      if (result.success) {
+        toast.success(result.message || "职业定位生成完成")
+      } else {
+        toast.error(result.error || "职业定位生成失败")
+      }
+    } catch (e) {
+      toast.error(`生成异常：${e instanceof Error ? e.message : String(e)}`)
+    } finally {
+      setPosPending(false)
+    }
+  }
+
+  async function handleGenerateOutputs() {
+    setOutputsPending(true)
+    try {
+      const result = await generateOutputsAction(caseId)
+      if (result.success) {
+        toast.success(result.message || "交付物生成完成")
+      } else {
+        toast.error(result.error || "交付物生成失败")
+      }
+    } catch (e) {
+      toast.error(`生成异常：${e instanceof Error ? e.message : String(e)}`)
+    } finally {
+      setOutputsPending(false)
+    }
+  }
+
+  async function handleRiskAudit() {
+    setRiskPending(true)
+    try {
+      const result = await auditRisksAction(caseId)
+      if (result.success) {
+        toast.success(result.message || "风险审查完成")
+      } else {
+        toast.error(result.error || "风险审查失败")
+      }
+    } catch (e) {
+      toast.error(`审查异常：${e instanceof Error ? e.message : String(e)}`)
+    } finally {
+      setRiskPending(false)
+    }
+  }
+
   function handleClick(key: string) {
     switch (key) {
       case "parse_resume":
@@ -88,6 +180,21 @@ export function WorkflowPanel({ caseId, currentStatus }: { caseId: string; curre
         break
       case "generate_evidence":
         handleBuildEvidence()
+        break
+      case "parse_jd":
+        handleParseJD()
+        break
+      case "generate_fingerprint":
+        handleGenerateFingerprint()
+        break
+      case "generate_positioning":
+        handleGeneratePositioning()
+        break
+      case "generate_outputs":
+        handleGenerateOutputs()
+        break
+      case "run_risk":
+        handleRiskAudit()
         break
       default:
         toast.info("该功能将在后续版本实现")
@@ -113,7 +220,12 @@ export function WorkflowPanel({ caseId, currentStatus }: { caseId: string; curre
           const enabled = isAvailable(action.requires)
           const isLoading =
             (action.key === "parse_resume" && parsePending) ||
-            (action.key === "generate_evidence" && evidencePending)
+            (action.key === "generate_evidence" && evidencePending) ||
+            (action.key === "parse_jd" && jdPending) ||
+            (action.key === "generate_fingerprint" && fpPending) ||
+            (action.key === "generate_positioning" && posPending) ||
+            (action.key === "generate_outputs" && outputsPending) ||
+            (action.key === "run_risk" && riskPending)
 
           return (
             <WorkflowBtn
@@ -130,7 +242,7 @@ export function WorkflowPanel({ caseId, currentStatus }: { caseId: string; curre
         <Separator className="my-3" />
 
         <WorkflowBtn label="导出 PDF" icon={Download} enabled={isAvailable("outputs_ready")} loading={false} onClick={() => toast.info("导出 PDF — 后续版本实现")} />
-        <WorkflowBtn label="发布个人主页" icon={Globe} enabled={isAvailable("outputs_ready")} loading={false} onClick={() => toast.info("发布个人主页 — 后续版本实现")} />
+        <WorkflowBtn label="发布个人主页" icon={Globe} enabled={isAvailable("outputs_ready")} loading={false} onClick={() => router.push(`/admin/cases/${caseId}/outputs?tab=profile`)} />
         <WorkflowBtn label="标记已交付" icon={CheckCheck} enabled={isAvailable("interview_ready")} loading={false} onClick={() => toast.info("标记已交付 — 后续版本实现")} />
       </CardContent>
     </Card>

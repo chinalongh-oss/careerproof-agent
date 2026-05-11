@@ -39,7 +39,17 @@ export async function submitCaseAction(formData: FormData) {
       .single()
 
     if (caseError || !caseData) {
-      return { success: false, error: `创建案例失败：${caseError?.message || "未知错误"}` }
+      let errDetail: string
+      if (caseError) {
+        try {
+          errDetail = JSON.stringify(caseError)
+        } catch {
+          errDetail = String(caseError)
+        }
+      } else {
+        errDetail = "insert 返回空数据"
+      }
+      return { success: false, error: `创建案例失败：${errDetail}` }
     }
 
     const caseId = caseData.id

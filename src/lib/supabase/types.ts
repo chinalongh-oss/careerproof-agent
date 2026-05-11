@@ -87,6 +87,8 @@ export interface JobDescription {
   keywords: Record<string, unknown> | null
   interview_focus: Record<string, unknown> | null
   resume_strategy: Record<string, unknown> | null
+  recommended_project_types: Record<string, unknown> | null
+  not_recommended_project_types: Record<string, unknown> | null
   created_at: string
 }
 
@@ -136,6 +138,7 @@ export interface GeneratedOutput {
 export interface RiskIssue {
   id: string
   case_id: string
+  output_id: string | null
   source_type: string | null
   source_text: string | null
   risk_type: string | null
@@ -147,12 +150,13 @@ export interface RiskIssue {
   created_at: string
 }
 
-export type RiskIssueStatus = "open" | "acknowledged" | "resolved" | "dismissed"
+export type RiskIssueStatus = "open" | "accepted" | "fixed" | "ignored"
 
 export interface PublicPage {
   id: string
   case_id: string
   slug: string
+  selected_theme: string
   password_hash: string | null
   is_published: boolean
   page_content: Record<string, unknown> | null

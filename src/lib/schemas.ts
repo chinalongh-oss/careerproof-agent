@@ -57,6 +57,8 @@ export const JDParseSchema = z.looseObject({
   keywords: z.array(z.string()).optional(),
   interview_focus: z.record(z.string(), z.unknown()).optional(),
   resume_strategy: z.record(z.string(), z.unknown()).optional(),
+  recommended_project_types: z.array(z.string()).optional(),
+  not_recommended_project_types: z.array(z.string()).optional(),
 })
 
 export type JDParseOutput = z.infer<typeof JDParseSchema>
@@ -77,12 +79,14 @@ export const PositioningItemSchema = z.object({
   version_name: z.string().optional(),
   target_reader: z.string().optional(),
   career_axis: z.string().optional(),
+  secondary_axis: z.string().optional(),
   one_line_summary: z.string().optional(),
   value_summary: z.string().optional(),
   tone_tags: z.array(z.string()).optional(),
   recommended_projects: z.array(z.string()).optional(),
   weak_projects: z.array(z.string()).optional(),
   risks: z.array(z.string()).optional(),
+  selected: z.boolean().optional(),
 })
 
 export const PositioningsOutputSchema = z.object({
@@ -100,9 +104,10 @@ export const ResumeOutputSchema = z.object({
 export type ResumeOutput = z.infer<typeof ResumeOutputSchema>
 
 export const RiskIssueSchema = z.object({
+  source_type: z.string().optional(),
+  source_text: z.string().optional(),
   risk_type: z.string().optional(),
   risk_level: z.string().optional(),
-  source_text: z.string().optional(),
   reason: z.string().optional(),
   suggestion: z.string().optional(),
   safer_rewrite: z.string().optional(),
@@ -130,6 +135,48 @@ export const SmokeTestSchema = z.object({
 
 export type SmokeTestOutput = z.infer<typeof SmokeTestSchema>
 
+export const ProfilePageSchema = z.object({
+  hero: z.object({
+    name: z.string().optional(),
+    positioning_title: z.string().optional(),
+    one_line_value: z.string().optional(),
+  }).optional(),
+  target_roles: z.array(z.string()).optional(),
+  core_capabilities: z.array(z.string()).optional(),
+  evidence_highlights: z.array(z.object({
+    metric: z.string().optional(),
+    description: z.string().optional(),
+  })).optional(),
+  featured_projects: z.array(z.object({
+    name: z.string().optional(),
+    context: z.string().optional(),
+    contribution: z.string().optional(),
+    result: z.string().optional(),
+  })).optional(),
+  work_experiences: z.array(z.object({
+    company: z.string().optional(),
+    role: z.string().optional(),
+    period: z.string().optional(),
+    highlights: z.array(z.string()).optional(),
+  })).optional(),
+  career_fingerprint: z.object({
+    career_axis: z.string().optional(),
+    secondary_axis: z.string().optional(),
+    differentiation_summary: z.string().optional(),
+  }).optional(),
+  trust_notes: z.array(z.string()).optional(),
+  downloadable_resume: z.boolean().optional(),
+  contact: z.object({
+    email: z.string().optional(),
+    wechat: z.string().optional(),
+    linkedin: z.string().optional(),
+  }).optional(),
+  theme: z.enum(["minimal", "professional", "headhunter_quickview"]).optional(),
+  markdown: z.string().optional(),
+})
+
+export type ProfilePageOutput = z.infer<typeof ProfilePageSchema>
+
 export const SCHEMA_REGISTRY = {
   resume_parse: ResumeParseSchema,
   evidence_cards: EvidenceCardsOutputSchema,
@@ -137,6 +184,7 @@ export const SCHEMA_REGISTRY = {
   fingerprint: FingerprintSchema,
   positionings: PositioningsOutputSchema,
   resume_output: ResumeOutputSchema,
+  profile_page: ProfilePageSchema,
   risk_review: RiskReviewOutputSchema,
   interview_prep: InterviewPrepSchema,
   smoke_test: SmokeTestSchema,

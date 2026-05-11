@@ -28,6 +28,7 @@ export const PROMPT_KEYS = {
   GENERATE_FINGERPRINT: "generate_fingerprint",
   GENERATE_POSITIONING: "generate_positioning",
   GENERATE_RESUME_OUTPUT: "generate_resume_output",
+  GENERATE_PROFILE_PAGE: "generate_profile_page",
   RUN_RISK_REVIEW: "run_risk_review",
   GENERATE_INTERVIEW_PREP: "generate_interview_prep",
 } as const
@@ -129,6 +130,10 @@ export const AGENT_PROMPTS: Record<PromptKey, string> = {
     "skills_summary": "技能总结段落"
   }
 }`,
+
+  [PROMPT_KEYS.GENERATE_PROFILE_PAGE]: `你是一位职业主页内容策划专家。请基于候选人的完整资料，生成面向HR、猎头和业务负责人的职业主页内容。
+
+返回一个 JSON 对象，不要与简历内容完全相同——职业主页应更注重叙事、证据亮点和职业故事。`,
 
   [PROMPT_KEYS.RUN_RISK_REVIEW]: `你是一位背景调查和风险审查专家。请审查已生成的简历内容，识别风险点。
 
