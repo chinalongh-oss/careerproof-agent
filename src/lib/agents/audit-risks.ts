@@ -85,10 +85,13 @@ export async function auditRisks(caseId: string) {
   let candidateProfileStr: string
   let posStr: string
 
-  try {
-    resumeStr = latestResume.markdown ?? ""
+  const MAX_RESUME_CHARS = 3000
+  const MAX_PROFILE_CHARS = 2500
 
-    profilePageStr = latestProfile.markdown ?? ""
+  try {
+    resumeStr = (latestResume.markdown ?? "").slice(0, MAX_RESUME_CHARS)
+
+    profilePageStr = (latestProfile.markdown ?? "").slice(0, MAX_PROFILE_CHARS)
 
     const trimmedCards = cardsArr.map((c: Record<string, unknown>) => ({
       id: c.id,
@@ -160,7 +163,7 @@ export async function auditRisks(caseId: string) {
     user_prompt: userPrompt,
     schema_name: "risk_review",
     schema: RiskReviewOutputSchema,
-    max_tokens: 8192,
+    max_tokens: 4096,
   })
 
   if ("error" in result) {
