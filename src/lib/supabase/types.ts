@@ -169,9 +169,11 @@ export interface ExportArtifact {
   case_id: string
   artifact_type: string
   file_url: string | null
+  storage_path: string | null
   sha256: string | null
   template_version: string | null
   schema_version: string | null
+  source_output_id: string | null
   created_at: string
 }
 

@@ -54,6 +54,7 @@ export function WorkflowPanel({ caseId, currentStatus }: { caseId: string; curre
   const [posPending, setPosPending] = useState(false)
   const [outputsPending, setOutputsPending] = useState(false)
   const [riskPending, setRiskPending] = useState(false)
+  const [exportPdfPending, setExportPdfPending] = useState(false)
 
   function isAvailable(requires: string) {
     if (currentIdx < 0) return false
@@ -173,6 +174,23 @@ export function WorkflowPanel({ caseId, currentStatus }: { caseId: string; curre
     }
   }
 
+  async function handleExportPdf() {
+    setExportPdfPending(true)
+    try {
+      const res = await fetch(`/api/cases/${caseId}/export-pdf`)
+      const data = await res.json()
+      if (!res.ok || !data.ok) {
+        toast.error(data.error || "导出 PDF 失败")
+        return
+      }
+      toast.success("PDF 导出成功")
+    } catch (e) {
+      toast.error(`导出异常：${e instanceof Error ? e.message : String(e)}`)
+    } finally {
+      setExportPdfPending(false)
+    }
+  }
+
   function handleClick(key: string) {
     switch (key) {
       case "parse_resume":
@@ -241,7 +259,7 @@ export function WorkflowPanel({ caseId, currentStatus }: { caseId: string; curre
 
         <Separator className="my-3" />
 
-        <WorkflowBtn label="导出 PDF" icon={Download} enabled={isAvailable("outputs_ready")} loading={false} onClick={() => toast.info("导出 PDF — 后续版本实现")} />
+        <WorkflowBtn label="导出 PDF" icon={Download} enabled={isAvailable("outputs_ready")} loading={exportPdfPending} onClick={handleExportPdf} />
         <WorkflowBtn label="发布个人主页" icon={Globe} enabled={isAvailable("outputs_ready")} loading={false} onClick={() => router.push(`/admin/cases/${caseId}/outputs?tab=profile`)} />
         <WorkflowBtn label="标记已交付" icon={CheckCheck} enabled={isAvailable("interview_ready")} loading={false} onClick={() => toast.info("标记已交付 — 后续版本实现")} />
       </CardContent>

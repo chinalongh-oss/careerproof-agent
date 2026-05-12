@@ -5,7 +5,7 @@ import { normalizePersonalInfo, type CaseContactFields } from "@/lib/resume/pers
 
 export const dynamic = "force-dynamic"
 
-export default async function ResumePrintPage({
+export default async function PrintResumePage({
   params,
 }: {
   params: Promise<{ caseId: string }>
@@ -33,12 +33,18 @@ export default async function ResumePrintPage({
 
   if (!resume || !resume.markdown) {
     return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="text-center space-y-3">
-          <p className="text-lg font-medium text-muted-foreground">
+      <div style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        minHeight: "60vh",
+        fontFamily: "system-ui, sans-serif",
+      }}>
+        <div style={{ textAlign: "center" }}>
+          <p style={{ fontSize: "18px", color: "#666", margin: "0 0 8px" }}>
             请先生成简历内容
           </p>
-          <p className="text-sm text-muted-foreground">
+          <p style={{ fontSize: "14px", color: "#999", margin: 0 }}>
             在交付物页面先生成简历 Markdown，然后刷新此页面。
           </p>
         </div>

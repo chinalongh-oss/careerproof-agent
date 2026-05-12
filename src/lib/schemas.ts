@@ -119,13 +119,39 @@ export const RiskReviewOutputSchema = z.object({
 
 export type RiskReviewOutput = z.infer<typeof RiskReviewOutputSchema>
 
-export const InterviewPrepSchema = z.object({
-  title: z.string().optional(),
-  markdown: z.string(),
-  sections: z.record(z.string(), z.unknown()).optional(),
+export const InterviewPackSchema = z.object({
+  overall_interview_strategy: z.string().optional(),
+  top_risks: z.array(z.object({
+    risk: z.string().optional(),
+    source: z.string().optional(),
+    interview_approach: z.string().optional(),
+  })).optional(),
+  preparation_checklist: z.array(z.object({
+    item: z.string().optional(),
+    reason: z.string().optional(),
+    detail: z.string().optional(),
+  })).optional(),
+  project_questions: z.array(z.object({
+    project_name: z.string().optional(),
+    project_summary: z.string().optional(),
+    likely_questions: z.array(z.object({
+      question: z.string().optional(),
+      context: z.string().optional(),
+    })).optional(),
+    high_risk_questions: z.array(z.object({
+      question: z.string().optional(),
+      risk_source: z.string().optional(),
+      why_risky: z.string().optional(),
+    })).optional(),
+    why_asked: z.string().optional(),
+    answer_structure: z.string().optional(),
+    data_to_prepare: z.array(z.string()).optional(),
+    do_not_overclaim: z.array(z.string()).optional(),
+    suggested_boundary_statement: z.string().optional(),
+  })).optional(),
 })
 
-export type InterviewPrepOutput = z.infer<typeof InterviewPrepSchema>
+export type InterviewPackOutput = z.infer<typeof InterviewPackSchema>
 
 export const SmokeTestSchema = z.object({
   ok: z.boolean(),
@@ -186,7 +212,7 @@ export const SCHEMA_REGISTRY = {
   resume_output: ResumeOutputSchema,
   profile_page: ProfilePageSchema,
   risk_review: RiskReviewOutputSchema,
-  interview_prep: InterviewPrepSchema,
+  interview_pack: InterviewPackSchema,
   smoke_test: SmokeTestSchema,
 } as const
 

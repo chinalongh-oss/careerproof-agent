@@ -9,6 +9,7 @@ import { generateCareerFingerprint } from "@/lib/agents/generate-career-fingerpr
 import { generatePositionings } from "@/lib/agents/generate-positionings"
 import { generateOutputs } from "@/lib/agents/generate-outputs"
 import { auditRisks } from "@/lib/agents/audit-risks"
+import { generateInterviewPack } from "@/lib/agents/generate-interview-pack"
 
 export async function updateDocText(docId: string, caseId: string, rawText: string) {
   try {
@@ -302,6 +303,20 @@ export async function auditRisksAction(caseId: string) {
     return { success: true, message: result.message }
   } catch (e) {
     return { success: false, error: `风险审查异常：${e instanceof Error ? e.message : String(e)}` }
+  }
+}
+
+export async function generateInterviewPackAction(caseId: string) {
+  try {
+    const result = await generateInterviewPack(caseId)
+    if (!result.success) {
+      return { success: false, error: result.error }
+    }
+    revalidatePath(`/admin/cases/${caseId}`)
+    revalidatePath(`/admin/cases/${caseId}/interview`)
+    return { success: true, message: result.message }
+  } catch (e) {
+    return { success: false, error: `生成面试准备包异常：${e instanceof Error ? e.message : String(e)}` }
   }
 }
 

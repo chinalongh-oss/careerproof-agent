@@ -22,12 +22,17 @@
     "lucide-react": "^0.555.0",
     "next": "^15.5.0",
     "openai": "^6.37.0",
+    "playwright": "^1.59.1",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
+    "react-markdown": "^10.1.0",
     "server-only": "^0.0.1",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.4.0",
     "zod": "^4.4.3"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["esbuild", "sharp", "unrs-resolver"]
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.0",
