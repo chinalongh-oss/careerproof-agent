@@ -26,6 +26,7 @@ import {
   generatePositioningsAction,
   generateOutputsAction,
   auditRisksAction,
+  generateInterviewPackAction,
 } from "./actions"
 
 const actions = [
@@ -54,6 +55,7 @@ export function WorkflowPanel({ caseId, currentStatus }: { caseId: string; curre
   const [posPending, setPosPending] = useState(false)
   const [outputsPending, setOutputsPending] = useState(false)
   const [riskPending, setRiskPending] = useState(false)
+  const [interviewPending, setInterviewPending] = useState(false)
   const [exportPdfPending, setExportPdfPending] = useState(false)
 
   function isAvailable(requires: string) {
@@ -174,6 +176,23 @@ export function WorkflowPanel({ caseId, currentStatus }: { caseId: string; curre
     }
   }
 
+  async function handleGenerateInterview() {
+    setInterviewPending(true)
+    try {
+      const result = await generateInterviewPackAction(caseId)
+      if (result.success) {
+        toast.success(result.message || "面试准备包生成完成")
+        router.refresh()
+      } else {
+        toast.error(result.error || "面试准备包生成失败")
+      }
+    } catch (e) {
+      toast.error(`生成异常：${e instanceof Error ? e.message : String(e)}`)
+    } finally {
+      setInterviewPending(false)
+    }
+  }
+
   async function handleExportPdf() {
     setExportPdfPending(true)
     try {
@@ -214,6 +233,9 @@ export function WorkflowPanel({ caseId, currentStatus }: { caseId: string; curre
       case "run_risk":
         handleRiskAudit()
         break
+      case "generate_interview":
+        handleGenerateInterview()
+        break
       default:
         toast.info("该功能将在后续版本实现")
     }
@@ -243,7 +265,8 @@ export function WorkflowPanel({ caseId, currentStatus }: { caseId: string; curre
             (action.key === "generate_fingerprint" && fpPending) ||
             (action.key === "generate_positioning" && posPending) ||
             (action.key === "generate_outputs" && outputsPending) ||
-            (action.key === "run_risk" && riskPending)
+            (action.key === "run_risk" && riskPending) ||
+            (action.key === "generate_interview" && interviewPending)
 
           return (
             <WorkflowBtn

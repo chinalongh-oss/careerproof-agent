@@ -5,6 +5,7 @@ import { serviceClient } from "@/lib/supabase/service"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
+export const maxDuration = 60
 
 const BUCKET_NAME = "exports"
 
@@ -52,12 +53,28 @@ export async function GET(
   const appUrl = req.nextUrl.origin
   const printUrl = `${appUrl}/print/cases/${caseId}/resume`
 
+  const adminCookie = req.cookies.get("admin_token")
+
   let browser: Awaited<ReturnType<typeof chromium.launch>>
   let pdfBuffer: Buffer
 
   try {
     browser = await chromium.launch({ headless: true })
     const context = await browser.newContext()
+
+    if (adminCookie) {
+      await context.addCookies([
+        {
+          name: "admin_token",
+          value: adminCookie.value,
+          domain: new URL(appUrl).hostname,
+          path: "/",
+          httpOnly: true,
+          sameSite: "Lax",
+        },
+      ])
+    }
+
     const page = await context.newPage()
 
     try {

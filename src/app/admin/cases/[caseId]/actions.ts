@@ -1,6 +1,7 @@
 "use server"
 
 import { revalidatePath } from "next/cache"
+import { hash } from "bcryptjs"
 import { serviceClient, normalizeError } from "@/lib/supabase/service"
 import { parseResume } from "@/lib/agents/parse-resume"
 import { buildProjectCards } from "@/lib/agents/build-project-cards"
@@ -306,9 +307,9 @@ export async function auditRisksAction(caseId: string) {
   }
 }
 
-export async function generateInterviewPackAction(caseId: string) {
+export async function generateInterviewPackAction(caseId: string, forceRegenerate = false) {
   try {
-    const result = await generateInterviewPack(caseId)
+    const result = await generateInterviewPack(caseId, forceRegenerate)
     if (!result.success) {
       return { success: false, error: result.error }
     }
@@ -347,6 +348,38 @@ async function computeTrustLevel(caseId: string): Promise<{
   level: string
   reason?: string
 }> {
+  const { data: caseData } = await serviceClient
+    .from("cases")
+    .select("status")
+    .eq("id", caseId)
+    .single()
+
+  const status = (caseData as Record<string, unknown> | null)?.status as string | undefined
+
+  const reviewedStatuses = ["risk_reviewed", "interview_ready", "delivered"]
+  const statusReviewed = status ? reviewedStatuses.includes(status) : false
+
+  let runsReviewed = false
+  if (!statusReviewed) {
+    const { data: runs } = await serviceClient
+      .from("generation_runs")
+      .select("error")
+      .eq("case_id", caseId)
+      .eq("agent_name", "audit_risks")
+      .order("created_at", { ascending: false })
+      .limit(1)
+
+    const runsArr = Array.isArray(runs) ? runs : runs ? [runs] : []
+    if (runsArr.length > 0) {
+      const latest = runsArr[0] as Record<string, unknown>
+      runsReviewed = latest.error === null
+    }
+  }
+
+  if (!statusReviewed && !runsReviewed) {
+    return { level: "未审查", reason: "尚未运行风险审查" }
+  }
+
   const { data: issues } = await serviceClient
     .from("risk_issues")
     .select("risk_type,risk_level,status")
@@ -563,5 +596,198 @@ export async function upsertPublicPageAction(
     return { success: true, message: "公开主页已发布", slug: finalSlug }
   } catch (e) {
     return { success: false, error: `发布异常：${e instanceof Error ? e.message : String(e)}` }
+  }
+}
+
+export async function markDeliveredAction(caseId: string) {
+  try {
+    const { data: resumeOutputs } = await serviceClient
+      .from("generated_outputs")
+      .select("id,markdown")
+      .eq("case_id", caseId)
+      .eq("output_type", "resume_markdown")
+      .order("version", { ascending: false })
+      .limit(1)
+
+    const resumeArr = Array.isArray(resumeOutputs) ? resumeOutputs : resumeOutputs ? [resumeOutputs] : []
+    const latestResume = resumeArr[0] ?? null
+
+    if (!latestResume || !latestResume.markdown) {
+      return { success: false, error: "请先生成简历内容（resume_markdown）" }
+    }
+
+    const { data: artifacts } = await serviceClient
+      .from("export_artifacts")
+      .select("id,sha256")
+      .eq("case_id", caseId)
+      .eq("artifact_type", "resume_pdf")
+      .order("created_at", { ascending: false })
+      .limit(1)
+
+    const artifactsArr = Array.isArray(artifacts) ? artifacts : artifacts ? [artifacts] : []
+    const latestArtifact = artifactsArr[0] ?? null
+
+    if (!latestArtifact || !latestArtifact.sha256) {
+      return { success: false, error: "请先导出 PDF 简历（需有有效 sha256）" }
+    }
+
+    const { data: interviewOutputs } = await serviceClient
+      .from("generated_outputs")
+      .select("id")
+      .eq("case_id", caseId)
+      .eq("output_type", "interview_pack")
+      .limit(1)
+
+    const interviewArr = Array.isArray(interviewOutputs) ? interviewOutputs : interviewOutputs ? [interviewOutputs] : []
+    if (interviewArr.length === 0) {
+      return { success: false, error: "请先生成面试准备包（interview_pack）" }
+    }
+
+    const { data: caseData } = await serviceClient
+      .from("cases")
+      .select("status")
+      .eq("id", caseId)
+      .single()
+
+    if (!caseData) {
+      return { success: false, error: "案例不存在" }
+    }
+
+    const status = (caseData as Record<string, unknown>).status as string
+
+    const statusOrder = [
+      "new_submitted", "parsed", "evidence_ready", "jd_ready", "fingerprint_ready",
+      "positioning_ready", "outputs_ready", "risk_reviewed", "interview_ready", "delivered",
+    ]
+
+    const riskReviewedIdx = statusOrder.indexOf("risk_reviewed")
+    const currentIdx = statusOrder.indexOf(status)
+
+    if (currentIdx < riskReviewedIdx) {
+      const { data: risks } = await serviceClient
+        .from("risk_issues")
+        .select("risk_level,status")
+        .eq("case_id", caseId)
+        .eq("status", "open")
+        .in("risk_level", ["high", "medium"])
+
+      const risksArr = Array.isArray(risks) ? risks : risks ? [risks] : []
+      const hasHighRisk = risksArr.some(
+        (r: Record<string, unknown>) => r.risk_level === "high"
+      )
+
+      if (hasHighRisk) {
+        return { success: false, error: "存在高风险待处理，请先完成风险审查" }
+      }
+
+      if (risksArr.length > 0) {
+        return { success: false, error: "存在中等风险待处理，请先完成风险审查" }
+      }
+    }
+
+    const { data: publicPages } = await serviceClient
+      .from("public_pages")
+      .select("id,is_published")
+      .eq("case_id", caseId)
+      .limit(1)
+
+    const pagesArr = Array.isArray(publicPages) ? publicPages : publicPages ? [publicPages] : []
+    if (pagesArr.length > 0) {
+      const page = pagesArr[0] as Record<string, unknown>
+      if (!page.is_published) {
+        return { success: false, error: "个人主页已创建但未发布，请先发布主页或将主页设为已发布状态" }
+      }
+    }
+
+    const { error } = await serviceClient
+      .from("cases")
+      .update({ status: "delivered", updated_at: new Date().toISOString() })
+      .eq("id", caseId)
+
+    if (error) {
+      return { success: false, error: `更新交付状态失败：${normalizeError(error)}` }
+    }
+
+    revalidatePath(`/admin/cases/${caseId}`)
+    revalidatePath(`/admin/cases/${caseId}/outputs`)
+    return { success: true, message: "已标记为已交付" }
+  } catch (e) {
+    return { success: false, error: `标记已交付异常：${e instanceof Error ? e.message : String(e)}` }
+  }
+}
+
+export async function setPagePasswordAction(caseId: string, password: string) {
+  try {
+    if (!password || password.length === 0) {
+      return { success: false, error: "密码不能为空" }
+    }
+
+    const passwordHash = await hash(password, 10)
+
+    const { data: existing } = await serviceClient
+      .from("public_pages")
+      .select("id")
+      .eq("case_id", caseId)
+      .limit(1)
+
+    const existingArr = Array.isArray(existing) ? existing : existing ? [existing] : []
+
+    if (existingArr.length > 0) {
+      const { error } = await serviceClient
+        .from("public_pages")
+        .update({ password_hash: passwordHash, updated_at: new Date().toISOString() })
+        .eq("case_id", caseId)
+
+      if (error) {
+        return { success: false, error: `设置密码失败：${normalizeError(error)}` }
+      }
+    } else {
+      const { data: caseData } = await serviceClient
+        .from("cases")
+        .select("candidate_name")
+        .eq("id", caseId)
+        .single()
+
+      const { generateSlug } = await import("@/lib/slug")
+      const slug = generateSlug(caseData?.candidate_name ?? null)
+
+      const { error } = await serviceClient
+        .from("public_pages")
+        .insert({
+          case_id: caseId,
+          slug,
+          selected_theme: "minimal",
+          is_published: false,
+          page_content: null,
+          password_hash: passwordHash,
+        })
+
+      if (error) {
+        return { success: false, error: `创建密码草稿失败：${normalizeError(error)}` }
+      }
+    }
+
+    revalidatePath(`/admin/cases/${caseId}/outputs`)
+    return { success: true, message: "主页密码已设置" }
+  } catch (e) {
+    return { success: false, error: `设置密码异常：${e instanceof Error ? e.message : String(e)}` }
+  }
+}
+
+export async function clearPagePasswordAction(caseId: string) {
+  try {
+    const { error } = await serviceClient
+      .from("public_pages")
+      .update({ password_hash: null, updated_at: new Date().toISOString() })
+      .eq("case_id", caseId)
+
+    if (error) {
+      return { success: false, error: `清除密码失败：${normalizeError(error)}` }
+    }
+
+    revalidatePath(`/admin/cases/${caseId}/outputs`)
+    return { success: true, message: "主页密码已清除" }
+  } catch (e) {
+    return { success: false, error: `清除密码异常：${e instanceof Error ? e.message : String(e)}` }
   }
 }

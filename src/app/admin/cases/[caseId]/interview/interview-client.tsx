@@ -90,6 +90,23 @@ export function InterviewClient({ caseId, candidateName, targetRole, interviewPa
     }
   }
 
+  async function handleRegenerate() {
+    setGenerating(true)
+    try {
+      const result = await generateInterviewPackAction(caseId, true)
+      if (result.success) {
+        toast.success(result.message || "重新生成完成")
+        window.location.reload()
+      } else {
+        toast.error(result.error || "重新生成失败")
+      }
+    } catch (e) {
+      toast.error(`生成异常：${e instanceof Error ? e.message : String(e)}`)
+    } finally {
+      setGenerating(false)
+    }
+  }
+
   if (!interviewPack || !packContent) {
     return (
       <div className="space-y-6">
@@ -133,7 +150,7 @@ export function InterviewClient({ caseId, candidateName, targetRole, interviewPa
           <Button
             variant="outline"
             size="sm"
-            onClick={handleGenerate}
+            onClick={handleRegenerate}
             disabled={generating}
           >
             {generating ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <MessageSquare className="h-4 w-4 mr-1.5" />}

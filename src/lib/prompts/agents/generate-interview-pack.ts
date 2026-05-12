@@ -6,7 +6,7 @@ export const GENERATE_INTERVIEW_PACK_USER_PROMPT = `请基于候选人的最终�
 2. **基于证据**：每个问题必须能够从输入材料中找到依据
 3. **对高风险表达生成追问**：凡是 evidence_level 不是 strong、或 risk_issues 中有相关风险的，都要生成追问
 4. **对数据缺失生成准备清单**：凡是 metrics 或 result_summary 不清晰的，要提醒候选人准备数据
-5. **对归因不清生成回答边界**：凡是 personal_actions 和 team_actions 边界模糊的，要给出生涯
+5. **对归因不清生成回答边界**：凡是 personal_actions 和 team_actions 边界模糊的，要给出回答边界/边界声明
 6. **不帮助编造经历**：所有建议必须基于已有材料
 7. **不帮助规避背调**：不提供如何粉饰或规避背调的建议
 

@@ -55,7 +55,7 @@ export async function generateInterviewPack(caseId: string, forceRegenerate = fa
 
   const { data: cards, error: cardsError } = await serviceClient
     .from("project_cards")
-    .select("id,project_name,business_context,business_problem,candidate_role,personal_actions,team_actions,metrics,result_summary,evidence_level")
+    .select("id,project_name,business_context,business_problem,candidate_role,personal_actions,team_actions,metrics,result_summary,evidence_level,risk_flags,interview_risks,public_visibility,recommended_expression,not_recommended_expression,role_angle_tags,reader_lens_tags")
     .eq("case_id", caseId)
     .order("created_at", { ascending: true })
 
@@ -115,6 +115,13 @@ export async function generateInterviewPack(caseId: string, forceRegenerate = fa
       metrics: c.metrics,
       result_summary: c.result_summary,
       evidence_level: c.evidence_level,
+      risk_flags: c.risk_flags,
+      interview_risks: c.interview_risks,
+      public_visibility: c.public_visibility,
+      recommended_expression: c.recommended_expression,
+      not_recommended_expression: c.not_recommended_expression,
+      role_angle_tags: c.role_angle_tags,
+      reader_lens_tags: c.reader_lens_tags,
     }))
     cardsStr = JSON.stringify(trimmedCards, null, 2)
 
@@ -171,6 +178,20 @@ export async function generateInterviewPack(caseId: string, forceRegenerate = fa
   }
 
   const packData = result.data as Record<string, unknown>
+
+  if (!packData.overall_interview_strategy || typeof packData.overall_interview_strategy !== "string" || packData.overall_interview_strategy.trim().length === 0) {
+    return { success: false, error: "生成校验失败：缺少整体面试策略（overall_interview_strategy）" }
+  }
+
+  const checklist = packData.preparation_checklist as Array<unknown> | undefined
+  if (!checklist || checklist.length < 1) {
+    return { success: false, error: "生成校验失败：准备清单（preparation_checklist）至少需要 1 条" }
+  }
+
+  const projectQuestions = packData.project_questions as Array<unknown> | undefined
+  if (!projectQuestions || projectQuestions.length < 1) {
+    return { success: false, error: "生成校验失败：项目追问（project_questions）至少需要 1 条" }
+  }
 
   let nextVersion = 1
   for (const row of outputsArr) {

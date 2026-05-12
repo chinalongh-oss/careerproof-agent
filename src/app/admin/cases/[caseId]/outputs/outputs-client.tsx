@@ -12,8 +12,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
 import Link from "next/link"
-import { Layout, RefreshCw, Save, Loader2, FileText, Globe, ShieldAlert, ExternalLink, Palette, Send, Download, Printer, Package, CheckCircle2, MessageSquare } from "lucide-react"
-import { generateOutputsAction, saveOutputAction, auditRisksAction, upsertPublicPageAction, savePublicPageThemeAction, updateCaseStatus } from "../actions"
+import { Layout, RefreshCw, Save, Loader2, FileText, Globe, ShieldAlert, ExternalLink, Palette, Send, Download, Printer, Package, CheckCircle2, MessageSquare, Lock } from "lucide-react"
+import { generateOutputsAction, saveOutputAction, auditRisksAction, upsertPublicPageAction, savePublicPageThemeAction, markDeliveredAction, setPagePasswordAction, clearPagePasswordAction } from "../actions"
 
 type OutputRow = {
   id: string
@@ -31,6 +31,7 @@ type PublicPageRow = {
   case_id: string
   slug: string
   selected_theme: string
+  password_hash: string | null
   is_published: boolean
   page_content: Record<string, unknown> | null
   created_at: string
@@ -101,6 +102,9 @@ export function OutputsClient({ caseId, candidateName, targetRole, caseStatus, r
   const [pdfSignedUrl, setPdfSignedUrl] = useState<string | null>(null)
   const [exportError, setExportError] = useState<string | null>(null)
   const [markingDelivered, setMarkingDelivered] = useState(false)
+  const [pagePassword, setPagePassword] = useState("")
+  const [settingPassword, setSettingPassword] = useState(false)
+  const [clearingPassword, setClearingPassword] = useState(false)
 
   const hasAny = !!(resumeOutput || profileOutput)
   const currentSlug = publicPage?.slug
@@ -240,7 +244,7 @@ export function OutputsClient({ caseId, candidateName, targetRole, caseStatus, r
   async function handleMarkDelivered() {
     setMarkingDelivered(true)
     try {
-      const result = await updateCaseStatus(caseId, "delivered")
+      const result = await markDeliveredAction(caseId)
       if (result.success) {
         toast.success("已标记为已交付")
         window.location.reload()
@@ -251,6 +255,45 @@ export function OutputsClient({ caseId, candidateName, targetRole, caseStatus, r
       toast.error(`标记异常：${e instanceof Error ? e.message : String(e)}`)
     } finally {
       setMarkingDelivered(false)
+    }
+  }
+
+  async function handleSetPassword() {
+    if (!pagePassword) {
+      toast.error("请输入密码")
+      return
+    }
+    setSettingPassword(true)
+    try {
+      const result = await setPagePasswordAction(caseId, pagePassword)
+      if (result.success) {
+        toast.success(result.message || "密码已设置")
+        setPagePassword("")
+        window.location.reload()
+      } else {
+        toast.error(result.error || "设置失败")
+      }
+    } catch (e) {
+      toast.error(`设置异常：${e instanceof Error ? e.message : String(e)}`)
+    } finally {
+      setSettingPassword(false)
+    }
+  }
+
+  async function handleClearPassword() {
+    setClearingPassword(true)
+    try {
+      const result = await clearPagePasswordAction(caseId)
+      if (result.success) {
+        toast.success(result.message || "密码已清除")
+        window.location.reload()
+      } else {
+        toast.error(result.error || "清除失败")
+      }
+    } catch (e) {
+      toast.error(`清除异常：${e instanceof Error ? e.message : String(e)}`)
+    } finally {
+      setClearingPassword(false)
     }
   }
 
@@ -556,6 +599,50 @@ export function OutputsClient({ caseId, candidateName, targetRole, caseStatus, r
                     )}
                     {currentSlug && !isPublished && (
                       <Badge variant="secondary" className="text-xs">未发布</Badge>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Password Management */}
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Lock className="h-4 w-4" />
+                    访问密码
+                  </CardTitle>
+                  <CardDescription>
+                    设置或清除公开主页的访问密码
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="flex items-center gap-2 text-sm">
+                    <Badge variant={publicPage?.password_hash ? "default" : "secondary"} className="text-xs">
+                      {publicPage?.password_hash ? "已设置密码" : "无需密码"}
+                    </Badge>
+                    {publicPage?.password_hash && (
+                      <span className="text-xs text-muted-foreground">访问者需要输入密码才能查看主页</span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <Input
+                      type="password"
+                      className="max-w-[200px]"
+                      value={pagePassword}
+                      onChange={(e) => setPagePassword(e.target.value)}
+                      placeholder="输入新密码"
+                      disabled={settingPassword || clearingPassword}
+                    />
+                    <Button size="sm" onClick={handleSetPassword} disabled={settingPassword || !pagePassword}>
+                      {settingPassword ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Lock className="h-3.5 w-3.5 mr-1" />}
+                      设置密码
+                    </Button>
+                    {publicPage?.password_hash && (
+                      <Button size="sm" variant="outline" onClick={handleClearPassword} disabled={clearingPassword}>
+                        {clearingPassword ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : null}
+                        清除密码
+                      </Button>
                     )}
                   </div>
                 </CardContent>
