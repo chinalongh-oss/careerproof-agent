@@ -31,6 +31,7 @@ export const PROMPT_KEYS = {
   GENERATE_PROFILE_PAGE: "generate_profile_page",
   RUN_RISK_REVIEW: "run_risk_review",
   GENERATE_INTERVIEW_PREP: "generate_interview_prep",
+  EVALUATE_JOB_FIT: "evaluate_job_fit",
 } as const
 
 export type PromptKey = (typeof PROMPT_KEYS)[keyof typeof PROMPT_KEYS]
@@ -165,4 +166,54 @@ export const AGENT_PROMPTS: Record<PromptKey, string> = {
     "closing": "结束语建议"
   }
 }`,
+
+  [PROMPT_KEYS.EVALUATE_JOB_FIT]: `你是一位资深招聘专家和职业匹配分析师。请评估候选人与目标 JD 的匹配程度。
+
+返回一个 JSON 对象，格式如下：
+{
+  "fit_score": 0-100的整数,
+  "fit_level": "high | medium | low | no_fit",
+  "summary": "匹配度总结（2-4句话）",
+  "matched_requirements": ["完全匹配的要求"],
+  "partially_matched_requirements": ["部分匹配的要求"],
+  "missing_requirements": ["明确缺失的要求"],
+  "hard_gaps": [
+    { "requirement": "硬性要求描述", "gap_detail": "为什么候选人无法满足" }
+  ],
+  "transferable_capabilities": [
+    { "capability": "可迁移能力", "from_experience": "来自于候选人的哪段经历", "transfer_evidence": "迁移证据" }
+  ],
+  "overfit_risks": ["强行包装成该岗位的风险"],
+  "recommended_delivery_mode": "full_resume | transition_resume | diagnostic_report | reject_direct_application",
+  "safe_positioning_statement": "可以安全使用的定位表述",
+  "unsafe_positioning_statement": "不应使用的定位表述（为什么危险）",
+  "alternative_roles": [
+    { "role": "替代岗位建议", "fit_reason": "匹配理由" }
+  ],
+  "evidence_to_collect": ["建议候选人补充的证据"]
+}
+
+重要匹配规则：
+- fit_level = high：经历与 JD 核心要求有 70% 以上直接匹配，可直接投递
+- fit_level = medium：有部分匹配但需转型包装，50%-70% 匹配
+- fit_level = low：仅有边缘相关经验，30%-50% 匹配
+- fit_level = no_fit：经验完全不匹配，<30%
+
+recommended_delivery_mode 规则：
+- high → full_resume
+- medium → transition_resume
+- low → diagnostic_report（主推荐），允许 forced_target_resume（用户确认风险后的目标 JD 尝试版）
+- no_fit → diagnostic_report 或 reject_direct_application
+
+forced_target_resume 适用场景：
+- fit_level = low 且用户坚持投递原 JD
+- 系统不编造缺失经验，保留可迁移能力表达
+- 简历标题不得使用无证据身份，必须用过渡性表达
+
+关键原则：
+- 不为了生成简历而强行匹配
+- 诚实标注经验缺口
+- 发现可迁移能力但标注迁移风险
+- 如果候选人经验无法支撑目标岗位，必须明确说明
+- 中文输出`,
 }

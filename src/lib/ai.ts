@@ -41,7 +41,11 @@ async function logRun(
   model: string,
   input: GenerationInput,
   output: GenerationOutput | null,
-  error: string | null
+  error: string | null,
+  runStatus?: string,
+  startedAt?: string,
+  finishedAt?: string,
+  durationMs?: number
 ): Promise<string> {
   try {
     const { data, error: insertError } = await serviceClient
@@ -53,6 +57,10 @@ async function logRun(
         input: input as unknown as Record<string, unknown>,
         output: output as unknown as Record<string, unknown> | null,
         error,
+        status: runStatus ?? (error ? "failed" : "completed"),
+        started_at: startedAt ?? null,
+        finished_at: finishedAt ?? null,
+        duration_ms: durationMs ?? null,
       })
       .select("id")
       .single()
@@ -139,6 +147,7 @@ export async function generateStructuredOutput<T extends z.ZodObject<z.ZodRawSha
   }
 
   const finalUserPrompt = buildUserPrompt(opts.user_prompt, opts.schema)
+  const startedAt = new Date().toISOString()
 
   try {
     const completion = await deepseek.chat.completions.create({
@@ -156,7 +165,8 @@ export async function generateStructuredOutput<T extends z.ZodObject<z.ZodRawSha
 
     if (!rawContent) {
       const errMsg = "AI 返回内容为空"
-      await logRun(opts.case_id, opts.agent_name, model, inputLog, null, errMsg)
+      const finishedAt = new Date().toISOString()
+      await logRun(opts.case_id, opts.agent_name, model, inputLog, null, errMsg, "failed", startedAt, finishedAt, new Date(finishedAt).getTime() - new Date(startedAt).getTime())
       return { error: errMsg }
     }
 
@@ -165,13 +175,18 @@ export async function generateStructuredOutput<T extends z.ZodObject<z.ZodRawSha
       parsed = JSON.parse(rawContent)
     } catch {
       const errMsg = "AI 返回内容不是合法 JSON"
+      const finishedAt = new Date().toISOString()
       await logRun(
         opts.case_id,
         opts.agent_name,
         model,
         inputLog,
         { raw_content: rawContent, parsed_data: null },
-        errMsg
+        errMsg,
+        "failed",
+        startedAt,
+        finishedAt,
+        new Date(finishedAt).getTime() - new Date(startedAt).getTime()
       )
       return { error: errMsg }
     }
@@ -182,30 +197,41 @@ export async function generateStructuredOutput<T extends z.ZodObject<z.ZodRawSha
 
     if (!result.success) {
       const errMsg = `Zod 校验失败：${result.error.message}`
+      const finishedAt = new Date().toISOString()
       await logRun(
         opts.case_id,
         opts.agent_name,
         model,
         inputLog,
         { raw_content: rawContent, parsed_data: parsed },
-        errMsg
+        errMsg,
+        "failed",
+        startedAt,
+        finishedAt,
+        new Date(finishedAt).getTime() - new Date(startedAt).getTime()
       )
       return { error: errMsg }
     }
 
+    const finishedAt = new Date().toISOString()
     const runId = await logRun(
       opts.case_id,
       opts.agent_name,
       model,
       inputLog,
       { raw_content: rawContent, parsed_data: result.data },
-      null
+      null,
+      "completed",
+      startedAt,
+      finishedAt,
+      new Date(finishedAt).getTime() - new Date(startedAt).getTime()
     )
 
     return { data: result.data as z.infer<T>, run_id: runId }
   } catch (e) {
     const errMsg = e instanceof Error ? e.message : String(e)
-    await logRun(opts.case_id, opts.agent_name, model, inputLog, null, errMsg)
+    const finishedAt = new Date().toISOString()
+    await logRun(opts.case_id, opts.agent_name, model, inputLog, null, errMsg, "failed", startedAt, finishedAt, new Date(finishedAt).getTime() - new Date(startedAt).getTime())
     return { error: errMsg }
   }
 }

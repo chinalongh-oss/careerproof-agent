@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation"
 import { serviceClient } from "@/lib/supabase/service"
 import { PositioningClient } from "./positioning-client"
+import type { JobFitAssessment } from "@/lib/supabase/types"
 
 export default async function PositioningPage({
   params,
@@ -53,6 +54,12 @@ export default async function PositioningPage({
   const hasJD = !!jdData
   const hasCards = cardsArr.length > 0
 
+  const { data: fitData } = await serviceClient
+    .from("job_fit_assessments")
+    .select("*")
+    .eq("case_id", caseId)
+    .single()
+
   return (
     <PositioningClient
       caseId={caseId}
@@ -63,6 +70,7 @@ export default async function PositioningPage({
       fingerprint={fingerprint ?? null}
       positionings={positionings}
       projectMap={projectMap}
+      jobFitAssessment={fitData as JobFitAssessment | null}
     />
   )
 }

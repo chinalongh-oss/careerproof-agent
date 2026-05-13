@@ -4,7 +4,7 @@ import { ShieldCheck, ShieldAlert, ShieldOff } from "lucide-react"
 export type TrustLevel = "已审查" | "需说明" | "已脱敏" | "未审查"
 
 interface TrustBadgeProps {
-  level: TrustLevel
+  level: TrustLevel | null
   reason?: string
 }
 
@@ -32,6 +32,7 @@ const config: Record<TrustLevel, { icon: typeof ShieldCheck; variant: "default" 
 }
 
 export function TrustBadge({ level, reason }: TrustBadgeProps) {
+  if (!level) return null
   const { icon: Icon, className } = config[level]
 
   return (

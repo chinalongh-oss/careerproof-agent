@@ -5,11 +5,12 @@ import { SYSTEM_PROMPT, PROMPT_KEYS } from "@/lib/prompt"
 import { ResumeParseSchema } from "@/lib/schemas"
 import { PARSE_RESUME_USER_PROMPT } from "@/lib/prompts/agents/parse-resume"
 import { serviceClient, normalizeError } from "@/lib/supabase/service"
+import { ensureDocumentText } from "@/lib/file-parser"
 
 export async function parseResume(caseId: string) {
   const { data: docs, error: docsError } = await serviceClient
     .from("documents")
-    .select("type,raw_text")
+    .select("id,case_id,type,raw_text,file_path,mime_type,parse_status")
     .eq("case_id", caseId)
 
   if (docsError) {
@@ -20,12 +21,18 @@ export async function parseResume(caseId: string) {
   const resumeDoc = docsArr.find((d) => d.type === "resume")
   const materialDoc = docsArr.find((d) => d.type === "project_material")
 
-  if (!resumeDoc?.raw_text) {
-    return { success: false, error: "未找到简历文本，请先提交简历" }
+  if (!resumeDoc) {
+    return { success: false, error: "未找到简历文档，请先提交简历" }
   }
 
-  const resumeText = resumeDoc.raw_text
-  const materialText = materialDoc?.raw_text || "无额外项目材料"
+  const resumeText = await ensureDocumentText(resumeDoc as Parameters<typeof ensureDocumentText>[0])
+  if (!resumeText) {
+    return { success: false, error: "无法读取简历文本，请检查文件是否上传成功或手动粘贴文本" }
+  }
+
+  const materialText = materialDoc
+    ? (await ensureDocumentText(materialDoc as Parameters<typeof ensureDocumentText>[0])) || "无额外项目材料"
+    : "无额外项目材料"
 
   const userPrompt = PARSE_RESUME_USER_PROMPT
     .replace("{{resume_text}}", resumeText)

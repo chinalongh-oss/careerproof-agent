@@ -9,6 +9,7 @@ export const AUDIT_RISKS_USER_PROMPT = `你是一位资深背景调查和风险�
 4. 目标 JD 解析（job_description）
 5. 候选人画像（candidate_profile）
 6. 选定的职业定位（selected_positioning）
+7. 岗位适配判断（job_fit_assessment）
 
 ## 风险类型
 
@@ -22,6 +23,10 @@ export const AUDIT_RISKS_USER_PROMPT = `你是一位资深背景调查和风险�
 - **timeline_conflict**：时间线冲突，工作经历时间有重叠或矛盾
 - **jd_mismatch**：岗位不匹配，简历内容与目标 JD 要求差距明显
 - **evidence_missing**：证据缺失，声称的能力或成果在证据卡中找不到对应证据
+- **jd_overfit**：JD 过度匹配，候选人经历与 JD 方向不同但简历强行包装为专业经验
+- **unsupported_target_title**：目标岗位标题无证据支撑，简历标题声称的目标岗位与候选人实际经历不符
+- **identity_mismatch**：身份不匹配，简历呈现的职业身份（如"AI 产品经理"）与候选人实际项目经历（如"商业化产品"）矛盾
+- **hard_requirement_missing**：硬性要求缺失，JD 中明确要求的学历/年限/技术栈等硬性条件候选人完全不满足
 
 ## 重点检查的强表述词
 
@@ -64,7 +69,7 @@ export const AUDIT_RISKS_USER_PROMPT = `你是一位资深背景调查和风险�
     {
       "source_type": "resume_markdown | profile_page | project_card",
       "source_text": "原文中的风险语句（直接引用）",
-      "risk_type": "overclaim | data_missing | attribution_unclear | sensitive_info | generic_expression | timeline_conflict | jd_mismatch | evidence_missing",
+      "risk_type": "overclaim | data_missing | attribution_unclear | sensitive_info | generic_expression | timeline_conflict | jd_mismatch | evidence_missing | jd_overfit | unsupported_target_title | identity_mismatch | hard_requirement_missing",
       "risk_level": "high | medium | low",
       "reason": "为什么这是风险点（具体说明）",
       "suggestion": "修改建议",
@@ -100,4 +105,7 @@ export const AUDIT_RISKS_USER_PROMPT = `你是一位资深背景调查和风险�
 {{candidate_profile}}
 
 ### 选定职业定位
-{{selected_positioning}}`
+{{selected_positioning}}
+
+### 岗位适配判断
+{{job_fit_assessment}}`

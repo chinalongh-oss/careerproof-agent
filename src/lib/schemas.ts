@@ -161,6 +161,35 @@ export const SmokeTestSchema = z.object({
 
 export type SmokeTestOutput = z.infer<typeof SmokeTestSchema>
 
+export const JobFitAssessmentSchema = z.object({
+  fit_score: z.number().min(0).max(100),
+  fit_level: z.enum(["high", "medium", "low", "no_fit"]),
+  summary: z.string(),
+  matched_requirements: z.array(z.string()).optional(),
+  partially_matched_requirements: z.array(z.string()).optional(),
+  missing_requirements: z.array(z.string()).optional(),
+  hard_gaps: z.array(z.object({
+    requirement: z.string().optional(),
+    gap_detail: z.string().optional(),
+  })).optional(),
+  transferable_capabilities: z.array(z.object({
+    capability: z.string().optional(),
+    from_experience: z.string().optional(),
+    transfer_evidence: z.string().optional(),
+  })).optional(),
+  overfit_risks: z.array(z.string()).optional(),
+  recommended_delivery_mode: z.enum(["full_resume", "transition_resume", "diagnostic_report", "reject_direct_application", "forced_target_resume"]),
+  safe_positioning_statement: z.string().optional(),
+  unsafe_positioning_statement: z.string().optional(),
+  alternative_roles: z.array(z.object({
+    role: z.string().optional(),
+    fit_reason: z.string().optional(),
+  })).optional(),
+  evidence_to_collect: z.array(z.string()).optional(),
+})
+
+export type JobFitAssessmentOutput = z.infer<typeof JobFitAssessmentSchema>
+
 export const ProfilePageSchema = z.object({
   hero: z.object({
     name: z.string().optional(),
@@ -214,6 +243,7 @@ export const SCHEMA_REGISTRY = {
   risk_review: RiskReviewOutputSchema,
   interview_pack: InterviewPackSchema,
   smoke_test: SmokeTestSchema,
+  job_fit_assessment: JobFitAssessmentSchema,
 } as const
 
 export type SchemaName = keyof typeof SCHEMA_REGISTRY

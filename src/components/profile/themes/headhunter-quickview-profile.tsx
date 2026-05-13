@@ -5,7 +5,7 @@ import type { ProfilePageData } from "../profile-page-renderer"
 
 interface HeadhunterQuickviewProfileProps {
   data: ProfilePageData
-  trustLevel: TrustLevel
+  trustLevel: TrustLevel | null
   trustReason?: string
 }
 

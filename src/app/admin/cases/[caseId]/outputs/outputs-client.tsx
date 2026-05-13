@@ -12,8 +12,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
 import Link from "next/link"
-import { Layout, RefreshCw, Save, Loader2, FileText, Globe, ShieldAlert, ExternalLink, Palette, Send, Download, Printer, Package, CheckCircle2, MessageSquare, Lock } from "lucide-react"
-import { generateOutputsAction, saveOutputAction, auditRisksAction, upsertPublicPageAction, savePublicPageThemeAction, markDeliveredAction, setPagePasswordAction, clearPagePasswordAction } from "../actions"
+import { Layout, RefreshCw, Save, Loader2, FileText, Globe, ShieldAlert, ExternalLink, Palette, Send, Download, Printer, Package, CheckCircle2, MessageSquare, Lock, AlertTriangle, Target } from "lucide-react"
+import { generateOutputsAction, saveOutputAction, auditRisksAction, upsertPublicPageAction, savePublicPageThemeAction, markDeliveredAction, setPagePasswordAction, clearPagePasswordAction, setDeliveryTargetAction } from "../actions"
+import type { JobFitAssessment, SelectedDeliveryTarget } from "@/lib/supabase/types"
 
 type OutputRow = {
   id: string
@@ -74,6 +75,8 @@ interface Props {
   recentArtifact: ArtifactRow
   interviewPack: OutputRow | null
   jdData: JDRow
+  jobFitAssessment: JobFitAssessment | null
+  deliveryTargets: SelectedDeliveryTarget[]
 }
 
 const THEME_OPTIONS = [
@@ -82,7 +85,7 @@ const THEME_OPTIONS = [
   { value: "headhunter_quickview", label: "Headhunter Quick View - 猎头速览" },
 ]
 
-export function OutputsClient({ caseId, candidateName, targetRole, caseStatus, resumeOutput, profileOutput, publicPage, recentArtifact, interviewPack, jdData }: Props) {
+export function OutputsClient({ caseId, candidateName, targetRole, caseStatus, resumeOutput, profileOutput, publicPage, recentArtifact, interviewPack, jdData, jobFitAssessment, deliveryTargets }: Props) {
   const searchParams = useSearchParams()
   const [activeTab, setActiveTab] = useState(searchParams.get("tab") ?? "resume")
 
@@ -105,10 +108,26 @@ export function OutputsClient({ caseId, candidateName, targetRole, caseStatus, r
   const [pagePassword, setPagePassword] = useState("")
   const [settingPassword, setSettingPassword] = useState(false)
   const [clearingPassword, setClearingPassword] = useState(false)
+  const [forceGenerating, setForceGenerating] = useState(false)
+  const [forceTargetSaving, setForceTargetSaving] = useState(false)
+
+  const [checkedTargets, setCheckedTargets] = useState<Array<{mode: string; role?: string | null}>>(
+    () => deliveryTargets.map(t => ({ mode: t.delivery_mode, role: t.target_role ?? null }))
+  )
 
   const hasAny = !!(resumeOutput || profileOutput)
   const currentSlug = publicPage?.slug
   const isPublished = publicPage?.is_published ?? false
+  const fitLevel = jobFitAssessment?.fit_level ?? "high"
+  const hasForcedTarget = checkedTargets.some(t => t.mode === "forced_target_resume")
+  const hasDiagnostic = checkedTargets.some(t => t.mode === "diagnostic_report")
+  const hasAltRoles = checkedTargets.some(t => t.mode === "full_resume" && t.role)
+  const altRoleTargets = checkedTargets.filter(t => t.mode === "full_resume" && t.role)
+  const anyTarget = checkedTargets.length > 0
+  const isForcedTargetMode = hasForcedTarget
+  const isLowFit = fitLevel === "low" || fitLevel === "no_fit"
+  const showFitWarning = jobFitAssessment && fitLevel !== "high"
+  const needsForceGenerate = isLowFit && !anyTarget
 
   const reloadPreservingTab = useCallback((tab?: string) => {
     const t = tab ?? activeTab
@@ -131,6 +150,65 @@ export function OutputsClient({ caseId, candidateName, targetRole, caseStatus, r
       toast.error(`生成异常：${e instanceof Error ? e.message : String(e)}`)
     } finally {
       setGenerating(false)
+    }
+  }
+
+  async function handleForceGenerate() {
+    setForceGenerating(true)
+    try {
+      const result = await generateOutputsAction(caseId, true)
+      if (result.success) {
+        toast.success(result.message || "强制生成完成（已附加风险标记）")
+        reloadPreservingTab()
+      } else {
+        toast.error(result.error || "强制生成失败")
+      }
+    } catch (e) {
+      toast.error(`强制生成异常：${e instanceof Error ? e.message : String(e)}`)
+    } finally {
+      setForceGenerating(false)
+    }
+  }
+
+  async function handleToggleTarget(deliveryMode: string, targetRole?: string) {
+    const role = targetRole ?? null
+    const alreadyChecked = checkedTargets.some(t => t.mode === deliveryMode && t.role === role)
+
+    if (alreadyChecked) {
+      setCheckedTargets(prev => prev.filter(t => !(t.mode === deliveryMode && t.role === role)))
+    } else {
+      setCheckedTargets(prev => [...prev, { mode: deliveryMode, role }])
+    }
+
+    setForceTargetSaving(true)
+    try {
+      const isForced = deliveryMode === "forced_target_resume"
+      const result = await setDeliveryTargetAction(
+        caseId,
+        deliveryMode,
+        isForced ? "original_jd" : "job_fit_recommended",
+        isForced,
+        isForced ? "用户坚持投递原目标 JD，已确认岗位适配风险" : undefined,
+        targetRole || undefined,
+        isForced
+      )
+      if (!result.success) {
+        toast.error(result.error || "操作失败")
+        setCheckedTargets(prev => alreadyChecked
+          ? [...prev, { mode: deliveryMode, role }]
+          : prev.filter(t => !(t.mode === deliveryMode && t.role === role))
+        )
+      } else {
+        window.location.reload()
+      }
+    } catch (e) {
+      toast.error(`操作异常：${e instanceof Error ? e.message : String(e)}`)
+      setCheckedTargets(prev => alreadyChecked
+        ? [...prev, { mode: deliveryMode, role }]
+        : prev.filter(t => !(t.mode === deliveryMode && t.role === role))
+      )
+    } finally {
+      setForceTargetSaving(false)
     }
   }
 
@@ -297,6 +375,99 @@ export function OutputsClient({ caseId, candidateName, targetRole, caseStatus, r
     }
   }
 
+  const isTargetChecked = (mode: string, role?: string) => {
+    const r = role ?? null
+    return checkedTargets.some(t => t.mode === mode && t.role === r)
+  }
+
+  const deliveryTargetSelector = isLowFit && jobFitAssessment ? (
+    <Card className="border-dashed border-yellow-400">
+      <CardHeader className="pb-3">
+        <div className="flex items-center gap-2">
+          <Target className="h-5 w-5 text-muted-foreground" />
+          <CardTitle className="text-base">选择交付目标（可多选）</CardTitle>
+        </div>
+        <CardDescription>勾选需要生成的交付物，点击生成按钮时一并打包。每个交付物会标明类型。</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {/* Alt roles */}
+        {Array.isArray(jobFitAssessment.alternative_roles) && (jobFitAssessment.alternative_roles as Array<{role?: string; fit_reason?: string}>).length > 0 && (
+          <div className="border rounded-lg p-3">
+            <p className="text-sm font-medium flex items-center gap-1.5">
+              <CheckCircle2 className="h-4 w-4 text-green-500" />
+              替代岗位简历（推荐）
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">基于候选人实际经历，生成匹配度更高的正式简历。</p>
+            <div className="mt-2 space-y-1.5">
+              {(jobFitAssessment.alternative_roles as Array<{role?: string; fit_reason?: string}>).slice(0, 5).map((alt, i) => {
+                const checked = isTargetChecked("full_resume", alt.role)
+                return (
+                  <label key={i} className="flex items-center gap-2 cursor-pointer hover:bg-muted/50 p-1.5 rounded">
+                    <input type="checkbox" className="h-4 w-4" checked={checked}
+                      onChange={() => handleToggleTarget("full_resume", alt.role)}
+                      disabled={forceTargetSaving} />
+                    <div className="flex-1 min-w-0">
+                      <span className="text-sm font-medium">{alt.role}</span>
+                      {alt.fit_reason && <span className="text-xs text-muted-foreground block mt-0.5">{alt.fit_reason}</span>}
+                    </div>
+                    {checked && <Badge variant="default" className="text-xs shrink-0">已选</Badge>}
+                  </label>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Forced target */}
+        <div className={`border rounded-lg p-3 ${hasForcedTarget ? 'border-destructive/50 bg-destructive/10' : 'border-destructive/30 bg-destructive/5'}`}>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" className="h-4 w-4" checked={hasForcedTarget}
+              onChange={() => handleToggleTarget("forced_target_resume")}
+              disabled={forceTargetSaving} />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium flex items-center gap-1.5 text-destructive">
+                <AlertTriangle className="h-4 w-4" />
+                目标 JD 尝试版（高风险）
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                基于原目标 JD 生成尝试版。系统不会编造缺失经验，简历标题使用过渡性表达。
+              </p>
+            </div>
+            {hasForcedTarget && <Badge variant="destructive" className="text-xs shrink-0">已选</Badge>}
+          </label>
+        </div>
+
+        {/* Diagnostic */}
+        <div className={`border rounded-lg p-3 ${hasDiagnostic ? 'bg-muted/50' : ''}`}>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" className="h-4 w-4" checked={hasDiagnostic}
+              onChange={() => handleToggleTarget("diagnostic_report")}
+              disabled={forceTargetSaving} />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium flex items-center gap-1.5">
+                <FileText className="h-4 w-4 text-muted-foreground" />
+                诊断报告
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">生成差距分析、可迁移能力清单和替代岗位建议。</p>
+            </div>
+            {hasDiagnostic && <Badge variant="secondary" className="text-xs shrink-0">已选</Badge>}
+          </label>
+        </div>
+
+        {anyTarget && (
+          <div className="bg-muted p-2 rounded text-xs">
+            <p className="text-muted-foreground">
+              当前选择：
+              {hasAltRoles && <span className="font-medium ml-1">{altRoleTargets.length} 个替代岗位简历</span>}
+              {hasForcedTarget && <span className="font-medium ml-1">· 目标 JD 尝试版</span>}
+              {hasDiagnostic && <span className="font-medium ml-1">· 诊断报告</span>}
+            </p>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  ) : null
+
   if (!hasAny) {
     return (
       <div className="space-y-6">
@@ -305,23 +476,97 @@ export function OutputsClient({ caseId, candidateName, targetRole, caseStatus, r
           <p className="text-muted-foreground mt-1">
             候选人：{candidateName || caseId}
             {targetRole && ` · 目标岗位：${targetRole}`}
+            {jdData?.role_name && (
+              <span className="ml-2 text-xs px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400">
+                来自 JD 解析
+              </span>
+            )}
           </p>
         </div>
-        <Card>
-          <CardContent className="py-12">
-            <div className="text-center space-y-3">
-              <Layout className="h-12 w-12 text-muted-foreground mx-auto" />
-              <p className="text-muted-foreground">暂无交付物</p>
-              <p className="text-sm text-muted-foreground">
-                请先完成前置步骤（解析简历、解析 JD、生成证据卡、生成职业指纹、选择职业定位），然后生成简历和主页。
-              </p>
-              <Button onClick={handleGenerate} disabled={generating}>
-                {generating ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Layout className="h-4 w-4 mr-1.5" />}
-                {generating ? "生成中..." : "生成简历和主页"}
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+
+        {showFitWarning && (
+          <Card className={isForcedTargetMode ? "border-dashed border-orange-400" : "border-dashed border-yellow-400"}>
+            <CardContent className="py-4">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className={`h-5 w-5 shrink-0 mt-0.5 ${isForcedTargetMode ? "text-orange-500" : "text-yellow-500"}`} />
+                <div className="space-y-1">
+                  <p className="font-medium text-sm">
+                    {isForcedTargetMode
+                      ? "目标 JD 尝试版（已确认风险）"
+                      : `岗位适配判断：${fitLevel === "medium" ? "中匹配" : fitLevel === "low" ? "低匹配" : "不匹配"}`}
+                    {!isForcedTargetMode && jobFitAssessment?.fit_score != null && ` (${jobFitAssessment.fit_score}/100)`}
+                  </p>
+                  {!isForcedTargetMode && jobFitAssessment?.summary && (
+                    <p className="text-xs text-muted-foreground mt-1">{jobFitAssessment.summary}</p>
+                  )}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {deliveryTargetSelector}
+
+        {anyTarget ? (
+          <Card>
+            <CardContent className="py-8">
+              <div className="text-center space-y-3">
+                <Package className="h-10 w-10 text-muted-foreground mx-auto" />
+                <p className="font-medium">已选择 {checkedTargets.length} 个交付目标</p>
+                <p className="text-xs text-muted-foreground">
+                  {hasAltRoles && <span className="mr-2">替代岗位简历 ×{altRoleTargets.length}</span>}
+                  {hasForcedTarget && <span className="mr-2">· 目标 JD 尝试版</span>}
+                  {hasDiagnostic && <span>· 诊断报告</span>}
+                </p>
+                <Button onClick={handleGenerate} disabled={generating}>
+                  {generating ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Layout className="h-4 w-4 mr-1.5" />}
+                  {generating ? "生成中..." : "打包生成交付物"}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        ) : (
+          <Card>
+            <CardContent className="py-12">
+              <div className="text-center space-y-3">
+                <Layout className="h-12 w-12 text-muted-foreground mx-auto" />
+                <p className="text-muted-foreground">暂无交付物</p>
+                <p className="text-sm text-muted-foreground">
+                  请先完成前置步骤（解析简历、解析 JD、生成证据卡、生成职业指纹、选择职业定位），然后生成简历和主页。
+                </p>
+                <div className="flex items-center justify-center gap-2">
+                  {isForcedTargetMode ? (
+                    <Button onClick={handleGenerate} disabled={generating}>
+                      {generating ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Layout className="h-4 w-4 mr-1.5" />}
+                      {generating ? "生成中..." : "生成目标 JD 尝试版"}
+                    </Button>
+                  ) : !needsForceGenerate ? (
+                    <Button onClick={handleGenerate} disabled={generating}>
+                      {generating ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Layout className="h-4 w-4 mr-1.5" />}
+                      {generating ? "生成中..." : "生成简历和主页"}
+                    </Button>
+                  ) : (
+                    <>
+                      <Button onClick={handleGenerate} disabled={generating} variant="outline">
+                        {generating ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Layout className="h-4 w-4 mr-1.5" />}
+                        {generating ? "生成中..." : "尝试生成"}
+                      </Button>
+                      <Button onClick={handleForceGenerate} disabled={forceGenerating} variant="destructive">
+                        {forceGenerating ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <ShieldAlert className="h-4 w-4 mr-1.5" />}
+                        {forceGenerating ? "强制生成中..." : "强制生成（附加风险）"}
+                      </Button>
+                    </>
+                  )}
+                </div>
+                {needsForceGenerate && (
+                  <p className="text-xs text-destructive mt-1">
+                    强制生成将自动附加 jd_overfit 高风险标记
+                  </p>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
     )
   }
@@ -334,6 +579,11 @@ export function OutputsClient({ caseId, candidateName, targetRole, caseStatus, r
           <p className="text-muted-foreground mt-1">
             候选人：{candidateName || caseId}
             {targetRole && ` · 目标岗位：${targetRole}`}
+            {jdData?.role_name && (
+              <span className="ml-2 text-xs px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400">
+                来自 JD 解析
+              </span>
+            )}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -374,6 +624,35 @@ export function OutputsClient({ caseId, candidateName, targetRole, caseStatus, r
           </Link>
         </div>
       </div>
+
+      {showFitWarning && (
+        <Card className={isForcedTargetMode ? "border-dashed border-orange-400" : "border-dashed border-yellow-400"}>
+          <CardContent className="py-3">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className={`h-5 w-5 shrink-0 mt-0.5 ${isForcedTargetMode ? "text-orange-500" : "text-yellow-500"}`} />
+              <div className="space-y-1 flex-1">
+                <p className="font-medium text-sm">
+                  {isForcedTargetMode
+                    ? "目标 JD 尝试版（已确认风险）"
+                    : `岗位适配：${fitLevel === "medium" ? "中匹配" : fitLevel === "low" ? "低匹配" : "不匹配"}`}
+                  {!isForcedTargetMode && jobFitAssessment?.fit_score != null && ` (${jobFitAssessment.fit_score}/100)`}
+                </p>
+                {!isForcedTargetMode && jobFitAssessment?.summary && (
+                  <p className="text-sm text-muted-foreground mt-1">{jobFitAssessment.summary}</p>
+                )}
+                {needsForceGenerate && (
+                  <Button size="sm" variant="destructive" onClick={handleForceGenerate} disabled={forceGenerating} className="mt-1">
+                    {forceGenerating ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <ShieldAlert className="h-3.5 w-3.5 mr-1" />}
+                    {forceGenerating ? "强制生成中..." : "强制生成（附加风险）"}
+                  </Button>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {deliveryTargetSelector}
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
@@ -854,12 +1133,36 @@ export function OutputsClient({ caseId, candidateName, targetRole, caseStatus, r
                     </p>
                   </div>
                 </div>
-                <Link href={`/admin/cases/${caseId}/interview`}>
-                  <Button variant="outline" size="sm">
-                    <ExternalLink className="h-3.5 w-3.5 mr-1" />
-                    {interviewPack ? "查看" : "生成"}
-                  </Button>
-                </Link>
+                <div className="flex items-center gap-2">
+                  {interviewPack && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={async () => {
+                        try {
+                          const res = await fetch(`/api/cases/${caseId}/export-interview-pdf`)
+                          const data = await res.json()
+                          if (data.ok && data.signedUrl) {
+                            window.open(data.signedUrl, "_blank")
+                          } else {
+                            toast.error(data.error || "导出失败")
+                          }
+                        } catch {
+                          toast.error("导出请求失败")
+                        }
+                      }}
+                    >
+                      <Download className="h-3.5 w-3.5 mr-1" />
+                      下载 PDF
+                    </Button>
+                  )}
+                  <Link href={`/admin/cases/${caseId}/interview`}>
+                    <Button variant="outline" size="sm">
+                      <ExternalLink className="h-3.5 w-3.5 mr-1" />
+                      {interviewPack ? "查看" : "生成"}
+                    </Button>
+                  </Link>
+                </div>
               </div>
 
               {/* JD 匹配摘要 */}

@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import Link from "next/link"
-import { Loader2, MessageSquare, AlertTriangle, CheckCircle2, ListChecks, FileText, ArrowLeft } from "lucide-react"
+import { Loader2, MessageSquare, AlertTriangle, CheckCircle2, ListChecks, FileText, ArrowLeft, Download } from "lucide-react"
 import { generateInterviewPackAction } from "../actions"
 
 type OutputRow = {
@@ -155,6 +155,27 @@ export function InterviewClient({ caseId, candidateName, targetRole, interviewPa
           >
             {generating ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <MessageSquare className="h-4 w-4 mr-1.5" />}
             重新生成
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={async () => {
+              try {
+                const res = await fetch(`/api/cases/${caseId}/export-interview-pdf`)
+                const data = await res.json()
+                if (data.ok && data.signedUrl) {
+                  window.open(data.signedUrl, "_blank")
+                  toast.success("面试准备包 PDF 导出成功")
+                } else {
+                  toast.error(data.error || "导出失败")
+                }
+              } catch {
+                toast.error("导出请求失败")
+              }
+            }}
+          >
+            <Download className="h-4 w-4 mr-1.5" />
+            下载 PDF
           </Button>
           <Link href={`/admin/cases/${caseId}`}>
             <Button variant="ghost" size="sm">

@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import Link from "next/link"
 import { ShieldAlert, RefreshCw, Loader2, CheckCircle2, EyeOff, FileWarning, AlertTriangle, Info } from "lucide-react"
-import { auditRisksAction, updateRiskIssueAction } from "../actions"
+import { auditRisksAction, updateRiskIssueAction, applyAcceptedRisksAction } from "../actions"
 import type { RiskIssue } from "@/lib/supabase/types"
 
 const riskLevelConfig = {
@@ -25,6 +25,10 @@ const riskTypeLabels: Record<string, string> = {
   timeline_conflict: "时间线冲突",
   jd_mismatch: "岗位不匹配",
   evidence_missing: "证据缺失",
+  jd_overfit: "JD过度匹配",
+  unsupported_target_title: "目标标题无支撑",
+  identity_mismatch: "身份不匹配",
+  hard_requirement_missing: "硬性要求缺失",
 }
 
 const statusLabels: Record<string, string> = {
@@ -51,6 +55,7 @@ interface Props {
 export function RiskClient({ caseId, candidateName, targetRole, risks, hasOutputs }: Props) {
   const [running, setRunning] = useState(false)
   const [updatingId, setUpdatingId] = useState<string | null>(null)
+  const [applying, setApplying] = useState(false)
 
   const highCount = risks.filter((r) => r.risk_level === "high").length
   const mediumCount = risks.filter((r) => r.risk_level === "medium").length
@@ -91,6 +96,27 @@ export function RiskClient({ caseId, candidateName, targetRole, risks, hasOutput
       toast.error(`更新异常：${e instanceof Error ? e.message : String(e)}`)
     } finally {
       setUpdatingId(null)
+    }
+  }
+
+  async function handleApplyAccepted() {
+    if (acceptedCount === 0) {
+      toast.error("没有已接受的风险建议")
+      return
+    }
+    setApplying(true)
+    try {
+      const result = await applyAcceptedRisksAction(caseId)
+      if (result.success) {
+        toast.success(result.message || "风险建议已应用")
+        window.location.reload()
+      } else {
+        toast.error(result.error || "应用失败")
+      }
+    } catch (e) {
+      toast.error(`应用异常：${e instanceof Error ? e.message : String(e)}`)
+    } finally {
+      setApplying(false)
     }
   }
 
@@ -141,6 +167,16 @@ export function RiskClient({ caseId, candidateName, targetRole, risks, hasOutput
             )}
             {risks.length > 0 ? "重新审查" : "运行风险审查"}
           </Button>
+          {acceptedCount > 0 && (
+            <Button onClick={handleApplyAccepted} disabled={applying} variant="default">
+              {applying ? (
+                <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+              ) : (
+                <CheckCircle2 className="h-4 w-4 mr-1.5" />
+              )}
+              应用已接受 ({acceptedCount})
+            </Button>
+          )}
           <Link href={`/admin/cases/${caseId}`}>
             <Button variant="ghost" size="sm">返回概览</Button>
           </Link>

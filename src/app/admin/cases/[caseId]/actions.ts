@@ -11,6 +11,8 @@ import { generatePositionings } from "@/lib/agents/generate-positionings"
 import { generateOutputs } from "@/lib/agents/generate-outputs"
 import { auditRisks } from "@/lib/agents/audit-risks"
 import { generateInterviewPack } from "@/lib/agents/generate-interview-pack"
+import { applyRiskFixes } from "@/lib/agents/apply-risk-fixes"
+import { evaluateJobFit } from "@/lib/agents/evaluate-job-fit"
 
 export async function updateDocText(docId: string, caseId: string, rawText: string) {
   try {
@@ -230,9 +232,9 @@ export async function selectPositioningAction(caseId: string, positioningId: str
   }
 }
 
-export async function generateOutputsAction(caseId: string) {
+export async function generateOutputsAction(caseId: string, forceGenerate = false) {
   try {
-    const result = await generateOutputs(caseId)
+    const result = await generateOutputs(caseId, false, forceGenerate)
     if (!result.success) {
       return { success: false, error: result.error }
     }
@@ -293,6 +295,82 @@ export async function saveOutputAction(
   }
 }
 
+export async function setDeliveryTargetAction(
+  caseId: string,
+  deliveryMode: string,
+  sourceType: string,
+  forceGenerate: boolean,
+  forceReason?: string,
+  targetRole?: string,
+  riskAcknowledged = false
+) {
+  try {
+    const roleVal = targetRole ?? null
+    let query = serviceClient
+      .from("selected_delivery_targets")
+      .select("id")
+      .eq("case_id", caseId)
+      .eq("delivery_mode", deliveryMode)
+
+    if (roleVal === null) {
+      query = query.is("target_role", null)
+    } else {
+      query = query.eq("target_role", roleVal)
+    }
+
+    const { data: existing } = await query.limit(1)
+
+    const existingArr = Array.isArray(existing) ? existing : existing ? [existing] : []
+
+    if (existingArr.length > 0) {
+      const { error } = await serviceClient
+        .from("selected_delivery_targets")
+        .delete()
+        .eq("id", (existingArr[0] as Record<string, unknown>).id as string)
+
+      if (error) {
+        return { success: false, error: `取消选择失败：${normalizeError(error)}` }
+      }
+    } else {
+      const { error } = await serviceClient
+        .from("selected_delivery_targets")
+        .insert({
+          case_id: caseId,
+          source_type: sourceType,
+          delivery_mode: deliveryMode,
+          target_role: roleVal,
+          force_generate: forceGenerate,
+          force_reason: forceReason ?? null,
+          risk_acknowledged: riskAcknowledged,
+        })
+
+      if (error) {
+        return { success: false, error: `保存交付目标失败：${normalizeError(error)}` }
+      }
+    }
+
+    revalidatePath(`/admin/cases/${caseId}`)
+    revalidatePath(`/admin/cases/${caseId}/outputs`)
+    return { success: true, message: existingArr.length > 0 ? "已取消选择" : "已选择" }
+  } catch (e) {
+    return { success: false, error: `操作异常：${e instanceof Error ? e.message : String(e)}` }
+  }
+}
+
+export async function evaluateJobFitAction(caseId: string) {
+  try {
+    const result = await evaluateJobFit(caseId)
+    if (!result.success) {
+      return { success: false, error: result.error }
+    }
+    revalidatePath(`/admin/cases/${caseId}`)
+    revalidatePath(`/admin/cases/${caseId}/positioning`)
+    return { success: true, message: result.message }
+  } catch (e) {
+    return { success: false, error: `岗位适配判断异常：${e instanceof Error ? e.message : String(e)}` }
+  }
+}
+
 export async function auditRisksAction(caseId: string) {
   try {
     const result = await auditRisks(caseId)
@@ -341,6 +419,21 @@ export async function updateRiskIssueAction(
     return { success: true, message: "风险状态已更新" }
   } catch (e) {
     return { success: false, error: `更新风险状态异常：${e instanceof Error ? e.message : String(e)}` }
+  }
+}
+
+export async function applyAcceptedRisksAction(caseId: string) {
+  try {
+    const result = await applyRiskFixes(caseId)
+    if (!result.success) {
+      return { success: false, error: result.error }
+    }
+    revalidatePath(`/admin/cases/${caseId}`)
+    revalidatePath(`/admin/cases/${caseId}/risk`)
+    revalidatePath(`/admin/cases/${caseId}/outputs`)
+    return { success: true, message: result.message }
+  } catch (e) {
+    return { success: false, error: `应用风险建议异常：${e instanceof Error ? e.message : String(e)}` }
   }
 }
 

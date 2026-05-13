@@ -15,8 +15,14 @@ import {
   CheckCircle2,
   Star,
   AlertTriangle,
+  ShieldCheck,
+  ShieldX,
+  ShieldAlert,
+  TrendingUp,
+  ArrowRight,
 } from "lucide-react"
-import { generateFingerprintAction, generatePositioningsAction, selectPositioningAction } from "../actions"
+import { generateFingerprintAction, generatePositioningsAction, selectPositioningAction, evaluateJobFitAction } from "../actions"
+import type { JobFitAssessment } from "@/lib/supabase/types"
 
 type FingerprintRow = {
   id: string
@@ -57,6 +63,7 @@ interface Props {
   fingerprint: FingerprintRow | null
   positionings: PositioningRow[]
   projectMap: Record<string, string>
+  jobFitAssessment: JobFitAssessment | null
 }
 
 function mapIdsToNames(ids: unknown, projectMap: Record<string, string>): string[] {
@@ -111,9 +118,11 @@ export function PositioningClient({
   fingerprint,
   positionings,
   projectMap,
+  jobFitAssessment,
 }: Props) {
   const [fpPending, setFpPending] = useState(false)
   const [posPending, setPosPending] = useState(false)
+  const [fitPending, setFitPending] = useState(false)
   const [selectingId, setSelectingId] = useState<string | null>(null)
 
   async function handleGenerateFingerprint() {
@@ -167,6 +176,23 @@ export function PositioningClient({
     }
   }
 
+  async function handleEvaluateFit() {
+    setFitPending(true)
+    try {
+      const result = await evaluateJobFitAction(caseId)
+      if (result.success) {
+        toast.success(result.message || "岗位适配判断完成")
+        window.location.reload()
+      } else {
+        toast.error(result.error || "岗位适配判断失败")
+      }
+    } catch (e) {
+      toast.error(`判断异常：${e instanceof Error ? e.message : String(e)}`)
+    } finally {
+      setFitPending(false)
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -215,6 +241,189 @@ export function PositioningClient({
           </CardContent>
         </Card>
       )}
+
+      {/* JD Fit Gate */}
+      <Card className={jobFitAssessment ? "" : "border-dashed"}>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              {jobFitAssessment ? (
+                jobFitAssessment.fit_level === "high" ? <ShieldCheck className="h-5 w-5 text-green-500" />
+                : jobFitAssessment.fit_level === "medium" ? <ShieldAlert className="h-5 w-5 text-yellow-500" />
+                : <ShieldX className="h-5 w-5 text-red-500" />
+              ) : (
+                <TrendingUp className="h-5 w-5 text-muted-foreground" />
+              )}
+              <CardTitle className="text-base">岗位适配判断</CardTitle>
+              {jobFitAssessment && (
+                <Badge variant={
+                  jobFitAssessment.fit_level === "high" ? "default"
+                  : jobFitAssessment.fit_level === "medium" ? "secondary"
+                  : "destructive"
+                } className="text-xs">
+                  {jobFitAssessment.fit_level === "high" ? "高匹配"
+                    : jobFitAssessment.fit_level === "medium" ? "中匹配"
+                    : jobFitAssessment.fit_level === "low" ? "低匹配"
+                    : "不匹配"}
+                </Badge>
+              )}
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleEvaluateFit}
+              disabled={fitPending || !hasJD || !hasCards}
+            >
+              {fitPending ? (
+                <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+              ) : jobFitAssessment ? (
+                <RefreshCw className="h-4 w-4 mr-1.5" />
+              ) : (
+                <TrendingUp className="h-4 w-4 mr-1.5" />
+              )}
+              {fitPending ? "判断中..." : jobFitAssessment ? "重新判断" : "运行岗位适配判断"}
+            </Button>
+          </div>
+          {!hasJD && (
+            <p className="text-sm text-muted-foreground">请先解析 JD，然后运行岗位适配判断。</p>
+          )}
+          {!hasCards && (
+            <p className="text-sm text-muted-foreground">请先生成项目证据卡，然后运行岗位适配判断。</p>
+          )}
+          {hasJD && hasCards && !jobFitAssessment && (
+            <p className="text-sm text-muted-foreground">点击上方按钮，让 AI 评估候选人与 JD 的匹配程度。</p>
+          )}
+        </CardHeader>
+        {jobFitAssessment && (
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">匹配分数</label>
+                <p className="text-2xl font-bold mt-1">
+                  {jobFitAssessment.fit_score ?? "—"}
+                  <span className="text-sm font-normal text-muted-foreground">/100</span>
+                </p>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">匹配等级</label>
+                <p className="text-lg font-semibold mt-1">
+                  {jobFitAssessment.fit_level === "high" ? "✅ 高匹配"
+                    : jobFitAssessment.fit_level === "medium" ? "⚠️ 中匹配"
+                    : jobFitAssessment.fit_level === "low" ? "❌ 低匹配"
+                    : "🚫 不匹配"}
+                </p>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">是否建议直接投递</label>
+                <p className="text-lg font-semibold mt-1">
+                  {jobFitAssessment.fit_level === "high" ? "✅ 建议投递"
+                    : jobFitAssessment.fit_level === "medium" ? "⚠️ 可投递但需说明风险"
+                    : "❌ 不建议直接投递"}
+                </p>
+              </div>
+            </div>
+
+            <Separator />
+
+            <div>
+              <label className="text-xs font-medium text-muted-foreground">匹配总结</label>
+              <p className="text-sm mt-1">{jobFitAssessment.summary || "—"}</p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">推荐交付模式</label>
+                <p className="text-sm mt-1 font-semibold">
+                  {jobFitAssessment.recommended_delivery_mode === "full_resume" ? "✅ 完整简历"
+                    : jobFitAssessment.recommended_delivery_mode === "transition_resume" ? "⚠️ 迁移型简历"
+                    : jobFitAssessment.recommended_delivery_mode === "diagnostic_report" ? "📋 诊断报告"
+                    : "🚫 不建议投递"}
+                </p>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">安全定位表述</label>
+                <p className="text-sm mt-1 text-green-600 dark:text-green-400">
+                  {jobFitAssessment.safe_positioning_statement || "—"}
+                </p>
+              </div>
+            </div>
+
+            <Separator />
+
+            <div>
+              <label className="text-xs font-medium text-destructive">高风险表达（避免使用）</label>
+              <p className="text-sm mt-1 text-destructive bg-destructive/10 p-2 rounded">
+                {jobFitAssessment.unsafe_positioning_statement || "—"}
+              </p>
+            </div>
+
+            {Array.isArray(jobFitAssessment.missing_requirements) && (jobFitAssessment.missing_requirements as string[]).length > 0 && (
+              <>
+                <Separator />
+                <div>
+                  <label className="text-xs font-medium text-destructive">缺失要求</label>
+                  <ul className="list-disc list-inside mt-1 space-y-0.5">
+                    {(jobFitAssessment.missing_requirements as string[]).map((req, i) => (
+                      <li key={i} className="text-sm text-destructive">{req}</li>
+                    ))}
+                  </ul>
+                </div>
+              </>
+            )}
+
+            {Array.isArray(jobFitAssessment.transferable_capabilities) && (jobFitAssessment.transferable_capabilities as Array<{capability?: string; from_experience?: string; transfer_evidence?: string}>).length > 0 && (
+              <>
+                <Separator />
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground">可迁移能力</label>
+                  <div className="mt-1 space-y-1.5">
+                    {(jobFitAssessment.transferable_capabilities as Array<{capability?: string; from_experience?: string; transfer_evidence?: string}>).map((cap, i) => (
+                      <div key={i} className="text-sm bg-muted/50 p-2 rounded">
+                        <span className="font-medium">{cap.capability}</span>
+                        {cap.from_experience && <span className="text-muted-foreground"> · 来自：{cap.from_experience}</span>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
+
+            {Array.isArray(jobFitAssessment.overfit_risks) && (jobFitAssessment.overfit_risks as string[]).length > 0 && (
+              <>
+                <Separator />
+                <div>
+                  <label className="text-xs font-medium text-destructive">过度包装风险</label>
+                  <ul className="list-disc list-inside mt-1 space-y-0.5">
+                    {(jobFitAssessment.overfit_risks as string[]).map((risk, i) => (
+                      <li key={i} className="text-sm text-destructive">{risk}</li>
+                    ))}
+                  </ul>
+                </div>
+              </>
+            )}
+
+            {Array.isArray(jobFitAssessment.alternative_roles) && (jobFitAssessment.alternative_roles as Array<{role?: string; fit_reason?: string}>).length > 0 && (
+              <>
+                <Separator />
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground">
+                    <ArrowRight className="h-3.5 w-3.5 inline mr-1" />
+                    替代岗位建议
+                  </label>
+                  <div className="mt-1 space-y-1.5">
+                    {(jobFitAssessment.alternative_roles as Array<{role?: string; fit_reason?: string}>).map((alt, i) => (
+                      <div key={i} className="text-sm border p-2 rounded">
+                        <span className="font-medium">{alt.role}</span>
+                        {alt.fit_reason && <span className="text-muted-foreground block text-xs mt-0.5">{alt.fit_reason}</span>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
+          </CardContent>
+        )}
+      </Card>
 
       <Card>
         <CardHeader>

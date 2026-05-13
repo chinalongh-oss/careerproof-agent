@@ -90,8 +90,6 @@ function buildContactLine(info: NormalizedPersonalInfo): string | null {
 export function ResumePrintView({
   markdown,
   personalInfo,
-  version,
-  createdAt,
 }: ResumePrintViewProps) {
   const bodyMarkdown = stripMarkdownIdentityBlock(markdown) || markdown
   const sections = parseResumeSections(bodyMarkdown)
@@ -162,12 +160,6 @@ export function ResumePrintView({
           </section>
         ))}
 
-        <footer className="resume-print-footer">
-          <p>
-            CareerProof AI &middot; v{version} &middot;{" "}
-            {new Date(createdAt).toLocaleDateString("zh-CN")}
-          </p>
-        </footer>
       </article>
     </>
   )
@@ -457,19 +449,6 @@ body {
   border: none;
   border-top: 1px solid #ddd;
   margin: 6px 0;
-}
-
-.resume-print-footer {
-  margin-top: 6mm;
-  padding-top: 1.5mm;
-  border-top: 0.6px solid #ddd;
-  text-align: center;
-}
-
-.resume-print-footer p {
-  font-size: 7.5pt;
-  color: #888;
-  margin: 0;
 }
 
 @media print {

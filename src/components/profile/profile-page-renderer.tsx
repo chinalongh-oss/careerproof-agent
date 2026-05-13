@@ -45,7 +45,7 @@ export interface ProfilePageData {
 interface ProfilePageRendererProps {
   data: ProfilePageData | null
   selectedTheme: string
-  trustLevel: TrustLevel
+  trustLevel?: TrustLevel | null
   trustReason?: string
 }
 
@@ -62,12 +62,12 @@ export function ProfilePageRenderer({ data, selectedTheme, trustLevel, trustReas
 
   switch (theme) {
     case "professional":
-      return <ProfessionalProfile data={data} trustLevel={trustLevel} trustReason={trustReason} />
+      return <ProfessionalProfile data={data} trustLevel={trustLevel ?? null} trustReason={trustReason} />
     case "headhunter_quickview":
-      return <HeadhunterQuickviewProfile data={data} trustLevel={trustLevel} trustReason={trustReason} />
+      return <HeadhunterQuickviewProfile data={data} trustLevel={trustLevel ?? null} trustReason={trustReason} />
     case "minimal":
     default:
-      return <MinimalProfile data={data} trustLevel={trustLevel} trustReason={trustReason} />
+      return <MinimalProfile data={data} trustLevel={trustLevel ?? null} trustReason={trustReason} />
   }
 }
 

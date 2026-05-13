@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useTransition } from "react"
+import { useState, useTransition, useRef } from "react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -8,14 +8,117 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { submitCaseAction } from "./actions"
-import { Loader2 } from "lucide-react"
+import { Loader2, FileText, Upload, X } from "lucide-react"
+
+const ALLOWED_TYPES = ".pdf,.docx,.txt,.md"
+const ALLOWED_EXTENSIONS = new Set(["pdf", "docx", "txt", "md"])
+
+function isAllowedFile(file: File): boolean {
+  const ext = file.name.split(".").pop()?.toLowerCase() ?? ""
+  return ALLOWED_EXTENSIONS.has(ext)
+}
+
+function FileInputCard({
+  id,
+  label,
+  description,
+  required,
+  disabled,
+  accept,
+  selectedName,
+  onSelect,
+  onClear,
+}: {
+  id: string
+  label: string
+  description: string
+  required?: boolean
+  disabled: boolean
+  accept: string
+  selectedName: string | null
+  onSelect: (file: File | null) => void
+  onClear: () => void
+}) {
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  return (
+    <div className="space-y-2">
+      <Label htmlFor={id}>
+        {label}
+        {required && " *"}
+      </Label>
+      <p className="text-xs text-muted-foreground">{description}</p>
+      {selectedName ? (
+        <div className="flex items-center gap-2 border rounded-md p-2 bg-muted/30">
+          <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+          <span className="text-sm truncate flex-1">{selectedName}</span>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-6 w-6 p-0"
+            disabled={disabled}
+            onClick={() => {
+              onClear()
+              if (inputRef.current) inputRef.current.value = ""
+            }}
+          >
+            <X className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      ) : (
+        <div
+          className="flex items-center justify-center border-2 border-dashed rounded-md p-6 cursor-pointer hover:bg-muted/30 transition-colors"
+          onClick={() => inputRef.current?.click()}
+        >
+          <div className="text-center">
+            <Upload className="h-6 w-6 text-muted-foreground mx-auto mb-1" />
+            <p className="text-sm text-muted-foreground">点击上传文件</p>
+            <p className="text-xs text-muted-foreground mt-0.5">支持 PDF / DOCX / TXT / MD</p>
+          </div>
+        </div>
+      )}
+      <input
+        ref={inputRef}
+        id={id}
+        name={id}
+        type="file"
+        accept={accept}
+        className="hidden"
+        disabled={disabled}
+        onChange={(e) => {
+          const file = e.target.files?.[0] ?? null
+          if (file && !isAllowedFile(file)) {
+            onSelect(null)
+            if (inputRef.current) inputRef.current.value = ""
+            return
+          }
+          onSelect(file)
+        }}
+      />
+    </div>
+  )
+}
 
 export default function SubmitPage() {
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
+  const [resumeFile, setResumeFile] = useState<File | null>(null)
+  const [jdFile, setJdFile] = useState<File | null>(null)
+  const [materialFile, setMaterialFile] = useState<File | null>(null)
 
   function handleSubmit(formData: FormData) {
     setError(null)
+
+    if (!resumeFile) {
+      setError("请上传简历文件")
+      return
+    }
+
+    formData.set("resume_file", resumeFile)
+    if (jdFile) formData.set("jd_file", jdFile)
+    if (materialFile) formData.set("material_file", materialFile)
+
     startTransition(async () => {
       const result = await submitCaseAction(formData)
       if (result?.error) {
@@ -115,49 +218,40 @@ export default function SubmitPage() {
           <Card className="mt-6">
             <CardHeader>
               <CardTitle>材料信息</CardTitle>
-              <CardDescription>提交旧简历和目标职位的详细描述。</CardDescription>
+              <CardDescription>上传旧简历、目标 JD 和补充材料文件。</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="resume_text">旧简历文本 *</Label>
-                <Textarea
-                  id="resume_text"
-                  name="resume_text"
-                  placeholder="请在此粘贴你的完整简历内容..."
-                  className="min-h-[200px]"
-                  required
-                  disabled={isPending}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="raw_jd">目标 JD</Label>
-                <Textarea
-                  id="raw_jd"
-                  name="raw_jd"
-                  placeholder="请在此粘贴目标职位的完整 JD..."
-                  className="min-h-[160px]"
-                  disabled={isPending}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="project_material">项目补充材料</Label>
-                <Textarea
-                  id="project_material"
-                  name="project_material"
-                  placeholder="可以补充项目文档、业绩数据、获奖信息等..."
-                  className="min-h-[120px]"
-                  disabled={isPending}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="portfolio_links">作品链接</Label>
-                <Input
-                  id="portfolio_links"
-                  name="portfolio_links"
-                  placeholder="GitHub / 个人主页 / 作品集链接"
-                  disabled={isPending}
-                />
-              </div>
+            <CardContent className="space-y-6">
+              <FileInputCard
+                id="resume_file"
+                label="旧简历"
+                description="上传旧版简历文件"
+                required
+                disabled={isPending}
+                accept={ALLOWED_TYPES}
+                selectedName={resumeFile?.name ?? null}
+                onSelect={setResumeFile}
+                onClear={() => setResumeFile(null)}
+              />
+              <FileInputCard
+                id="jd_file"
+                label="目标 JD"
+                description="上传目标职位的 JD 文件"
+                disabled={isPending}
+                accept={ALLOWED_TYPES}
+                selectedName={jdFile?.name ?? null}
+                onSelect={setJdFile}
+                onClear={() => setJdFile(null)}
+              />
+              <FileInputCard
+                id="material_file"
+                label="项目补充材料"
+                description="可上传项目文档、业绩数据、获奖信息等"
+                disabled={isPending}
+                accept={ALLOWED_TYPES}
+                selectedName={materialFile?.name ?? null}
+                onSelect={setMaterialFile}
+                onClear={() => setMaterialFile(null)}
+              />
               <div className="space-y-2">
                 <Label htmlFor="privacy_notes">隐私与敏感信息说明</Label>
                 <Textarea

@@ -5,11 +5,12 @@ import { SYSTEM_PROMPT, PROMPT_KEYS } from "@/lib/prompt"
 import { JDParseSchema } from "@/lib/schemas"
 import { PARSE_JD_USER_PROMPT } from "@/lib/prompts/agents/parse-jd"
 import { serviceClient, normalizeError } from "@/lib/supabase/service"
+import { ensureDocumentText } from "@/lib/file-parser"
 
 export async function parseJD(caseId: string) {
   const { data: docs, error: docsError } = await serviceClient
     .from("documents")
-    .select("id,type,raw_text")
+    .select("id,case_id,type,raw_text,file_path,mime_type,parse_status")
     .eq("case_id", caseId)
 
   if (docsError) {
@@ -19,11 +20,16 @@ export async function parseJD(caseId: string) {
   const docsArr = Array.isArray(docs) ? docs : docs ? [docs] : []
   const jdDoc = docsArr.find((d) => d.type === "jd")
 
-  if (!jdDoc?.raw_text) {
-    return { success: false, error: "未找到 JD 文本，请先在案例详情页提交 JD 文档" }
+  if (!jdDoc) {
+    return { success: false, error: "未找到 JD 文档，请先在案例详情页提交 JD 文件" }
   }
 
-  const userPrompt = PARSE_JD_USER_PROMPT.replace("{{jd_text}}", jdDoc.raw_text)
+  const jdText = await ensureDocumentText(jdDoc as Parameters<typeof ensureDocumentText>[0])
+  if (!jdText) {
+    return { success: false, error: "无法读取 JD 文本，请检查文件是否上传成功或手动粘贴文本" }
+  }
+
+  const userPrompt = PARSE_JD_USER_PROMPT.replace("{{jd_text}}", jdText)
 
   const result = await generateStructuredOutput({
     agent_name: "parse_jd",
@@ -45,7 +51,7 @@ export async function parseJD(caseId: string) {
     .from("job_descriptions")
     .upsert({
       case_id: caseId,
-      raw_jd: jdDoc.raw_text,
+      raw_jd: jdText,
       role_name: data.role_name ?? null,
       company_type: data.company_type ?? null,
       seniority_level: data.seniority_level ?? null,

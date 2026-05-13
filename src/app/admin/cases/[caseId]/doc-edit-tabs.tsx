@@ -5,11 +5,22 @@ import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { updateDocText, updateCasePrivacyNotes } from "./actions"
-import { Loader2, Pencil } from "lucide-react"
+import { Loader2, Pencil, FileText, AlertTriangle, CheckCircle2, Clock } from "lucide-react"
 
-type Doc = { id: string; type: string; raw_text: string | null } | null
+type Doc = {
+  id: string
+  type: string
+  raw_text: string | null
+  file_name: string | null
+  file_path: string | null
+  mime_type: string | null
+  file_size: number | null
+  parse_status: string | null
+  parse_error: string | null
+} | null
 
 export function DocEditTabs({
   caseId,
@@ -70,6 +81,41 @@ export function DocEditTabs({
   )
 }
 
+function formatFileSize(bytes: number | null): string {
+  if (bytes === null || bytes === undefined) return ""
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+function ParseStatusBadge({ status }: { status: string | null; error?: string | null }) {
+  if (!status || status === "pending") {
+    return (
+      <Badge variant="secondary" className="text-xs gap-1">
+        <Clock className="h-3 w-3" />
+        待解析
+      </Badge>
+    )
+  }
+  if (status === "completed") {
+    return (
+      <Badge variant="default" className="text-xs gap-1 bg-green-100 text-green-700 border-green-300">
+        <CheckCircle2 className="h-3 w-3" />
+        已解析
+      </Badge>
+    )
+  }
+  if (status === "failed") {
+    return (
+      <Badge variant="destructive" className="text-xs gap-1">
+        <AlertTriangle className="h-3 w-3" />
+        解析失败
+      </Badge>
+    )
+  }
+  return <Badge variant="outline" className="text-xs">{status}</Badge>
+}
+
 function EditableDocCard({
   caseId,
   label,
@@ -120,6 +166,25 @@ function EditableDocCard({
         )}
       </CardHeader>
       <CardContent>
+        {doc && doc.file_name && (
+          <div className="flex items-center gap-3 mb-3 p-2 bg-muted/30 rounded-md">
+            <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium truncate">{doc.file_name}</p>
+              <p className="text-xs text-muted-foreground">
+                {formatFileSize(doc.file_size)}
+                {doc.mime_type && ` · ${doc.mime_type}`}
+              </p>
+            </div>
+            <ParseStatusBadge status={doc.parse_status} error={doc.parse_error} />
+          </div>
+        )}
+        {doc?.parse_error && (
+          <p className="text-xs text-destructive mb-3 bg-destructive/5 rounded p-2">
+            {doc.parse_error}
+          </p>
+        )}
+
         {editing && doc ? (
           <div className="space-y-3">
             <Textarea

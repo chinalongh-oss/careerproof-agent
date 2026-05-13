@@ -14,51 +14,32 @@ export async function GET(
 
   const { data: outputsData } = await serviceClient
     .from("generated_outputs")
-    .select("id,markdown,version,template_id,prompt_version")
+    .select("id,version,content")
     .eq("case_id", caseId)
-    .eq("output_type", "resume_markdown")
+    .eq("output_type", "interview_pack")
     .order("version", { ascending: false })
     .limit(1)
 
   const outputsArr = Array.isArray(outputsData) ? outputsData : outputsData ? [outputsData] : []
-  const resume = outputsArr[0] ?? null
+  const pack = outputsArr[0] ?? null
 
-  if (!resume || !resume.markdown) {
+  if (!pack || !pack.content) {
     return NextResponse.json(
-      { ok: false, error: "请先生成简历内容（resume_markdown）" },
+      { ok: false, error: "请先生成面试准备包（interview_pack）" },
       { status: 400 }
     )
   }
 
-  const { data: caseData } = await serviceClient
-    .from("cases")
-    .select("candidate_name")
-    .eq("id", caseId)
-    .single()
-
-  const candidateName = caseData?.candidate_name || ""
-  const nameInMarkdown =
-    resume.markdown.includes(candidateName) ||
-    /^#\s+\S/.test(resume.markdown)
-
-  if (!candidateName && !nameInMarkdown) {
-    console.warn(
-      `[export-pdf] case ${caseId}: cases.candidate_name 为空且 markdown 中无姓名，仍继续导出但 PDF 可能缺姓名`
-    )
-  }
-
   const appUrl = req.nextUrl.origin
-  const printUrl = `${appUrl}/print/cases/${caseId}/resume`
+  const printUrl = `${appUrl}/admin/cases/${caseId}/interview-print`
   const adminCookie = req.cookies.get("admin_token")
 
   const result = await exportHtmlToPdf({
     caseId,
     printUrl,
     adminCookie: adminCookie?.value,
-    artifactType: "resume_pdf",
-    sourceOutputId: resume.id,
-    templateVersion: resume.template_id || null,
-    schemaVersion: resume.prompt_version || null,
+    artifactType: "interview_pack_pdf",
+    sourceOutputId: pack.id,
     appUrl,
   })
 

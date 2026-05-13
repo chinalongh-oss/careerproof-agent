@@ -6,7 +6,7 @@ import type { ProfilePageData } from "../profile-page-renderer"
 
 interface ProfessionalProfileProps {
   data: ProfilePageData
-  trustLevel: TrustLevel
+  trustLevel: TrustLevel | null
   trustReason?: string
 }
 

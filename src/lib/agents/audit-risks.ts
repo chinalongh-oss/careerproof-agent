@@ -147,6 +147,14 @@ export async function auditRisks(caseId: string) {
     return { success: false, error: "输入数据格式异常" }
   }
 
+  const { data: fitData } = await serviceClient
+    .from("job_fit_assessments")
+    .select("fit_score,fit_level,recommended_delivery_mode,safe_positioning_statement,unsafe_positioning_statement,missing_requirements,hard_gaps,overfit_risks")
+    .eq("case_id", caseId)
+    .single()
+
+  const fitStr = fitData ? JSON.stringify(fitData, null, 2) : "未进行岗位适配判断"
+
   const userPrompt = AUDIT_RISKS_USER_PROMPT
     .replace("{{resume_markdown}}", resumeStr)
     .replace("{{profile_page}}", profilePageStr)
@@ -154,6 +162,7 @@ export async function auditRisks(caseId: string) {
     .replace("{{job_description}}", jdStr)
     .replace("{{candidate_profile}}", candidateProfileStr)
     .replace("{{selected_positioning}}", posStr)
+    .replace("{{job_fit_assessment}}", fitStr)
 
   const result = await generateStructuredOutput({
     agent_name: "audit_risks",

@@ -1,10 +1,17 @@
+"use client"
+
+import { Suspense } from "react"
+import { useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import Link from "next/link"
 import { CheckCircle } from "lucide-react"
 
-export default function SubmitSuccessPage() {
+function SuccessContent() {
+  const searchParams = useSearchParams()
+  const caseId = searchParams.get("caseId")
+
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b">
@@ -36,13 +43,31 @@ export default function SubmitSuccessPage() {
               <Link href="/">
                 <Button variant="outline">返回首页</Button>
               </Link>
-              <Link href="/admin/cases">
-                <Button>查看案例</Button>
-              </Link>
+              {caseId ? (
+                <Link href={`/admin/cases/${caseId}`}>
+                  <Button>查看案例</Button>
+                </Link>
+              ) : (
+                <Link href="/admin/cases">
+                  <Button>查看案例列表</Button>
+                </Link>
+              )}
             </div>
           </CardContent>
         </Card>
       </main>
     </div>
+  )
+}
+
+export default function SubmitSuccessPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center">
+        <p className="text-muted-foreground">加载中...</p>
+      </div>
+    }>
+      <SuccessContent />
+    </Suspense>
   )
 }

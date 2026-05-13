@@ -2,6 +2,7 @@ import { Suspense } from "react"
 import { notFound } from "next/navigation"
 import { serviceClient } from "@/lib/supabase/service"
 import { OutputsClient } from "./outputs-client"
+import type { JobFitAssessment, SelectedDeliveryTarget } from "@/lib/supabase/types"
 
 export default async function OutputsPage({
   params,
@@ -53,16 +54,33 @@ export default async function OutputsPage({
 
   const { data: jdData } = await serviceClient
     .from("job_descriptions")
+    .select("id,case_id,role_name,keywords,core_responsibilities,required_skills,hidden_requirements,resume_strategy,interview_focus")
+    .eq("case_id", caseId)
+    .single()
+
+  const targetRole = (jdData as Record<string, unknown> | null)?.role_name as string | undefined
+    ?? (caseData as Record<string, unknown>).target_role as string | undefined
+    ?? null
+
+  const { data: fitData } = await serviceClient
+    .from("job_fit_assessments")
     .select("*")
     .eq("case_id", caseId)
     .single()
+
+  const { data: dtData } = await serviceClient
+    .from("selected_delivery_targets")
+    .select("*")
+    .eq("case_id", caseId)
+
+  const deliveryTargets = Array.isArray(dtData) ? dtData as SelectedDeliveryTarget[] : dtData ? [dtData as SelectedDeliveryTarget] : []
 
   return (
     <Suspense fallback={<div className="py-12 text-center text-muted-foreground">加载中...</div>}>
       <OutputsClient
         caseId={caseId}
         candidateName={caseData.candidate_name}
-        targetRole={caseData.target_role}
+        targetRole={targetRole}
         caseStatus={(caseData as Record<string, unknown>).status as string}
         resumeOutput={resumeOutput}
         profileOutput={profileOutput}
@@ -70,6 +88,8 @@ export default async function OutputsPage({
         recentArtifact={recentArtifact}
         interviewPack={interviewPack}
         jdData={jdData}
+        jobFitAssessment={fitData as JobFitAssessment | null}
+        deliveryTargets={deliveryTargets}
       />
     </Suspense>
   )

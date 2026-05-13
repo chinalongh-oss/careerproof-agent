@@ -34,6 +34,12 @@ export interface Document {
   type: string
   file_url: string | null
   raw_text: string | null
+  file_path: string | null
+  file_name: string | null
+  mime_type: string | null
+  file_size: number | null
+  parse_status: string | null
+  parse_error: string | null
   created_at: string
 }
 
@@ -150,7 +156,7 @@ export interface RiskIssue {
   created_at: string
 }
 
-export type RiskIssueStatus = "open" | "accepted" | "fixed" | "ignored"
+export type RiskIssueStatus = "open" | "accepted" | "applied" | "fixed" | "ignored"
 
 export interface PublicPage {
   id: string
@@ -177,6 +183,39 @@ export interface ExportArtifact {
   created_at: string
 }
 
+export interface JobFitAssessment {
+  id: string
+  case_id: string
+  fit_score: number | null
+  fit_level: string | null
+  summary: string | null
+  matched_requirements: Record<string, unknown> | null
+  partially_matched_requirements: Record<string, unknown> | null
+  missing_requirements: Record<string, unknown> | null
+  hard_gaps: Record<string, unknown> | null
+  transferable_capabilities: Record<string, unknown> | null
+  overfit_risks: Record<string, unknown> | null
+  recommended_delivery_mode: string | null
+  safe_positioning_statement: string | null
+  unsafe_positioning_statement: string | null
+  alternative_roles: Record<string, unknown> | null
+  evidence_to_collect: Record<string, unknown> | null
+  created_at: string
+}
+
+export interface SelectedDeliveryTarget {
+  id: string
+  case_id: string
+  source_type: string
+  delivery_mode: string
+  target_role: string | null
+  force_generate: boolean
+  force_reason: string | null
+  risk_acknowledged: boolean
+  created_at: string
+  updated_at: string
+}
+
 export interface GenerationRun {
   id: string
   case_id: string | null
@@ -185,6 +224,10 @@ export interface GenerationRun {
   input: Record<string, unknown> | null
   output: Record<string, unknown> | null
   error: string | null
+  status: string | null
+  started_at: string | null
+  finished_at: string | null
+  duration_ms: number | null
   created_at: string
 }
 
@@ -300,6 +343,25 @@ export interface Database {
           created_at?: string
         }
         Update: Partial<Omit<GenerationRun, "id">>
+        Relationships: []
+      }
+      job_fit_assessments: {
+        Row: JobFitAssessment
+        Insert: Omit<JobFitAssessment, "id" | "created_at"> & {
+          id?: string
+          created_at?: string
+        }
+        Update: Partial<Omit<JobFitAssessment, "id">>
+        Relationships: []
+      }
+      selected_delivery_targets: {
+        Row: SelectedDeliveryTarget
+        Insert: Omit<SelectedDeliveryTarget, "id" | "created_at" | "updated_at"> & {
+          id?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: Partial<Omit<SelectedDeliveryTarget, "id">>
         Relationships: []
       }
     }

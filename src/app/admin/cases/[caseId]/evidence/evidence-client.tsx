@@ -19,6 +19,7 @@ import {
   AlertTriangle,
 } from "lucide-react"
 import { updateProjectCard, toggleFeaturedAction, regenerateCardsAction } from "../actions"
+import { FIELD_LABELS, translateRiskFlag, translateRiskFlags } from "@/lib/i18n/project-card-labels"
 
 type CardRow = {
   id: string
@@ -303,9 +304,10 @@ export function EvidenceClient({ caseId, candidateName, targetRole, initialCards
       )
     }
     if (typeof val === "object") {
+      const displayVal = field === "risk_flags" ? translateRiskFlags(val) : val
       return (
         <pre className="text-xs bg-muted rounded p-2 overflow-auto max-h-40 whitespace-pre-wrap">
-          {JSON.stringify(val, null, 2)}
+          {JSON.stringify(displayVal, null, 2)}
         </pre>
       )
     }
@@ -327,7 +329,7 @@ export function EvidenceClient({ caseId, candidateName, targetRole, initialCards
         <span className="text-xs text-muted-foreground">风险标签：</span>
         {list.map((f, i) => (
           <Badge key={i} variant="outline" className="text-xs border-yellow-400 text-yellow-600">
-            {String(f)}
+            {translateRiskFlag(String(f))}
           </Badge>
         ))}
       </div>
@@ -490,8 +492,8 @@ export function EvidenceClient({ caseId, candidateName, targetRole, initialCards
                       ))}
                       {JSON_FIELDS.map((field) => (
                         <div key={field}>
-                          <label className="text-xs font-medium text-muted-foreground mb-1 block capitalize">
-                            {field}
+                          <label className="text-xs font-medium text-muted-foreground mb-1 block">
+                            {FIELD_LABELS[field] ?? field}
                           </label>
                           {renderFieldValue(field as keyof CardRow, card, true)}
                         </div>
@@ -507,8 +509,8 @@ export function EvidenceClient({ caseId, candidateName, targetRole, initialCards
                       ))}
                       {JSON_FIELDS.map((field) => (
                         <div key={field} className="md:col-span-2">
-                          <label className="text-xs font-medium text-muted-foreground capitalize">
-                            {field}
+                          <label className="text-xs font-medium text-muted-foreground">
+                            {FIELD_LABELS[field] ?? field}
                           </label>
                           <div className="mt-1">{renderFieldValue(field as keyof CardRow, card, false)}</div>
                         </div>

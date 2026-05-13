@@ -27,6 +27,7 @@ import {
   generateOutputsAction,
   auditRisksAction,
   generateInterviewPackAction,
+  evaluateJobFitAction,
 } from "./actions"
 
 const actions = [
@@ -35,6 +36,7 @@ const actions = [
   { key: "parse_jd", label: "解析 JD", icon: ScanText, requires: "new_submitted" },
   { key: "generate_fingerprint", label: "生成职业指纹", icon: Fingerprint, requires: "evidence_ready" },
   { key: "generate_positioning", label: "生成职业定位", icon: Target, requires: "fingerprint_ready" },
+  { key: "evaluate_job_fit", label: "岗位适配判断", icon: ShieldAlert, requires: "jd_ready" },
   { key: "generate_outputs", label: "生成简历和主页", icon: Layout, requires: "positioning_ready" },
   { key: "run_risk", label: "运行风险审查", icon: ShieldAlert, requires: "outputs_ready" },
   { key: "generate_interview", label: "生成面试准备包", icon: MessageSquare, requires: "risk_reviewed" },
@@ -56,6 +58,7 @@ export function WorkflowPanel({ caseId, currentStatus }: { caseId: string; curre
   const [outputsPending, setOutputsPending] = useState(false)
   const [riskPending, setRiskPending] = useState(false)
   const [interviewPending, setInterviewPending] = useState(false)
+  const [fitPending, setFitPending] = useState(false)
   const [exportPdfPending, setExportPdfPending] = useState(false)
 
   function isAvailable(requires: string) {
@@ -70,6 +73,7 @@ export function WorkflowPanel({ caseId, currentStatus }: { caseId: string; curre
       const result = await parseResumeAction(caseId)
       if (result.success) {
         toast.success(result.message || "简历解析完成")
+        router.refresh()
       } else {
         toast.error(result.error || "简历解析失败")
       }
@@ -86,6 +90,7 @@ export function WorkflowPanel({ caseId, currentStatus }: { caseId: string; curre
       const result = await buildProjectCardsAction(caseId)
       if (result.success) {
         toast.success(result.message || "项目证据卡生成完成")
+        router.refresh()
       } else {
         toast.error(result.error || "项目证据卡生成失败")
       }
@@ -102,6 +107,7 @@ export function WorkflowPanel({ caseId, currentStatus }: { caseId: string; curre
       const result = await parseJDAction(caseId)
       if (result.success) {
         toast.success(result.message || "JD 解析完成")
+        router.refresh()
       } else {
         toast.error(result.error || "JD 解析失败")
       }
@@ -118,6 +124,7 @@ export function WorkflowPanel({ caseId, currentStatus }: { caseId: string; curre
       const result = await generateFingerprintAction(caseId)
       if (result.success) {
         toast.success(result.message || "职业指纹生成完成")
+        router.refresh()
       } else {
         toast.error(result.error || "职业指纹生成失败")
       }
@@ -134,6 +141,7 @@ export function WorkflowPanel({ caseId, currentStatus }: { caseId: string; curre
       const result = await generatePositioningsAction(caseId)
       if (result.success) {
         toast.success(result.message || "职业定位生成完成")
+        router.refresh()
       } else {
         toast.error(result.error || "职业定位生成失败")
       }
@@ -150,6 +158,7 @@ export function WorkflowPanel({ caseId, currentStatus }: { caseId: string; curre
       const result = await generateOutputsAction(caseId)
       if (result.success) {
         toast.success(result.message || "交付物生成完成")
+        router.refresh()
       } else {
         toast.error(result.error || "交付物生成失败")
       }
@@ -166,6 +175,7 @@ export function WorkflowPanel({ caseId, currentStatus }: { caseId: string; curre
       const result = await auditRisksAction(caseId)
       if (result.success) {
         toast.success(result.message || "风险审查完成")
+        router.refresh()
       } else {
         toast.error(result.error || "风险审查失败")
       }
@@ -190,6 +200,23 @@ export function WorkflowPanel({ caseId, currentStatus }: { caseId: string; curre
       toast.error(`生成异常：${e instanceof Error ? e.message : String(e)}`)
     } finally {
       setInterviewPending(false)
+    }
+  }
+
+  async function handleEvaluateFit() {
+    setFitPending(true)
+    try {
+      const result = await evaluateJobFitAction(caseId)
+      if (result.success) {
+        toast.success(result.message || "岗位适配判断完成")
+        router.refresh()
+      } else {
+        toast.error(result.error || "岗位适配判断失败")
+      }
+    } catch (e) {
+      toast.error(`判断异常：${e instanceof Error ? e.message : String(e)}`)
+    } finally {
+      setFitPending(false)
     }
   }
 
@@ -236,6 +263,9 @@ export function WorkflowPanel({ caseId, currentStatus }: { caseId: string; curre
       case "generate_interview":
         handleGenerateInterview()
         break
+      case "evaluate_job_fit":
+        handleEvaluateFit()
+        break
       default:
         toast.info("该功能将在后续版本实现")
     }
@@ -264,6 +294,7 @@ export function WorkflowPanel({ caseId, currentStatus }: { caseId: string; curre
             (action.key === "parse_jd" && jdPending) ||
             (action.key === "generate_fingerprint" && fpPending) ||
             (action.key === "generate_positioning" && posPending) ||
+            (action.key === "evaluate_job_fit" && fitPending) ||
             (action.key === "generate_outputs" && outputsPending) ||
             (action.key === "run_risk" && riskPending) ||
             (action.key === "generate_interview" && interviewPending)

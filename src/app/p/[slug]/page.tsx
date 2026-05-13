@@ -3,7 +3,6 @@ import { cookies } from "next/headers"
 import { createClient } from "@/lib/supabase/server"
 import { ProfilePageRenderer } from "@/components/profile/profile-page-renderer"
 import type { ProfilePageData } from "@/components/profile/profile-page-renderer"
-import { TrustLevel } from "@/components/profile/shared/trust-badge"
 import type { Database } from "@/lib/supabase/types"
 import { verifyPageAccessCookie } from "@/lib/auth"
 import { PublicPagePasswordGate } from "./password-gate"
@@ -45,15 +44,12 @@ export default async function PublicProfilePage({
   const pageContent = (row.page_content ?? {}) as Record<string, unknown>
   const profileData: ProfilePageData = pageContent as unknown as ProfilePageData
 
-  const trustLevel = (pageContent._computed_trust_level as TrustLevel) ?? "未审查"
-  const trustReason = pageContent._computed_trust_reason as string | undefined
-
   return (
     <ProfilePageRenderer
       data={profileData}
       selectedTheme={row.selected_theme ?? "minimal"}
-      trustLevel={trustLevel}
-      trustReason={trustReason}
+      trustLevel={null}
+      trustReason={undefined}
     />
   )
 }
