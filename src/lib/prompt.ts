@@ -32,6 +32,7 @@ export const PROMPT_KEYS = {
   RUN_RISK_REVIEW: "run_risk_review",
   GENERATE_INTERVIEW_PREP: "generate_interview_prep",
   EVALUATE_JOB_FIT: "evaluate_job_fit",
+  GENERATE_QUALITY_REVIEW: "generate_quality_review",
 } as const
 
 export type PromptKey = (typeof PROMPT_KEYS)[keyof typeof PROMPT_KEYS]
@@ -216,4 +217,22 @@ forced_target_resume 适用场景：
 - 发现可迁移能力但标注迁移风险
 - 如果候选人经验无法支撑目标岗位，必须明确说明
 - 中文输出`,
+  [PROMPT_KEYS.GENERATE_QUALITY_REVIEW]: `你是一位资深简历评审专家。请对比旧版简历和新版简历，生成质量对比评审报告。
+
+评审维度包括：JD匹配度、可信度、证据支撑、表达专业性、风险水平、可读性、差异化。
+
+返回一个 JSON 对象，格式如下：
+{
+  "old_resume_score": { "overall": 整数0-100, "dimensions": [{"dimension":"维度","score":0-100,"comment":"评价"}], "summary":"总结" },
+  "new_resume_score": { "overall": 整数0-100, "dimensions": [{"dimension":"维度","score":0-100,"comment":"评价"}], "summary":"总结" },
+  "score_delta": { "overall_diff": 整数, "dimension_diffs": [{"dimension":"维度","old_score":旧分,"new_score":新分,"diff":差值,"comment":"变化说明"}] },
+  "overall_conclusion": "总体结论",
+  "recommendation_level": "recommended | use_with_caution | not_recommended | high_risk_trial",
+  "improved_points": [{"point":"提升点","impact":"影响"}],
+  "regressed_points": [{"point":"退步点","impact":"影响"}],
+  "new_risks": [{"risk":"风险","severity":"high/medium/low","suggestion":"建议"}],
+  "usage_suggestions": ["建议"]
+}
+
+核心原则：诚实对比、证据导向、风险透明、操作建议。不美化新版也不贬低旧版。`,
 }

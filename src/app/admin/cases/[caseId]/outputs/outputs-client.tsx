@@ -15,7 +15,7 @@ import Link from "next/link"
 import { Layout, RefreshCw, Save, Loader2, FileText, Globe, ShieldAlert, ExternalLink, Palette, Send, Download, Printer, Package, CheckCircle2, MessageSquare, Lock, AlertTriangle, Target } from "lucide-react"
 import { generateOutputsAction, saveOutputAction, auditRisksAction, upsertPublicPageAction, savePublicPageThemeAction, markDeliveredAction, setPagePasswordAction, clearPagePasswordAction, setDeliveryTargetAction } from "../actions"
 import { formatLocalTime } from "@/lib/utils"
-import type { JobFitAssessment, SelectedDeliveryTarget } from "@/lib/supabase/types"
+import type { JobFitAssessment, SelectedDeliveryTarget, ResumeQualityAssessment } from "@/lib/supabase/types"
 
 type OutputRow = {
   id: string
@@ -82,6 +82,7 @@ interface Props {
   jdData: JDRow
   jobFitAssessment: JobFitAssessment | null
   deliveryTargets: SelectedDeliveryTarget[]
+  qualityAssessment: ResumeQualityAssessment | null
 }
 
 const THEME_OPTIONS = [
@@ -90,7 +91,7 @@ const THEME_OPTIONS = [
   { value: "headhunter_quickview", label: "Headhunter Quick View - 猎头速览" },
 ]
 
-export function OutputsClient({ caseId, candidateName, targetRole, caseStatus, resumeOutputs, currentResumeOutputs, diagnosticOutput, profileOutput, publicPage, recentArtifact, interviewPack, jdData, jobFitAssessment, deliveryTargets }: Props) {
+export function OutputsClient({ caseId, candidateName, targetRole, caseStatus, resumeOutputs, currentResumeOutputs, diagnosticOutput, profileOutput, publicPage, recentArtifact, interviewPack, jdData, jobFitAssessment, deliveryTargets, qualityAssessment }: Props) {
   const searchParams = useSearchParams()
   const [activeTab, setActiveTab] = useState(searchParams.get("tab") ?? "resume")
 
@@ -1414,7 +1415,31 @@ export function OutputsClient({ caseId, candidateName, targetRole, caseStatus, r
               </Card>
 
               {/* 标记已交付 */}
-              <div className="border-t pt-4">
+              <div className="border-t pt-4 space-y-3">
+                {(!qualityAssessment || qualityAssessment.user_decision === "pending" || qualityAssessment.user_decision === null) && caseStatus !== "delivered" && (
+                  <div className="flex items-center gap-2 text-sm p-3 rounded-md bg-orange-50 border border-orange-200 dark:bg-orange-950/20 dark:border-orange-800">
+                    <AlertTriangle className="h-4 w-4 text-orange-600 shrink-0" />
+                    <div>
+                      <p className="text-orange-800 dark:text-orange-200 font-medium">请先完成质量对比评审</p>
+                      <p className="text-xs text-orange-600 dark:text-orange-300 mt-0.5">
+                        标记交付前需要在<Link href={`/admin/cases/${caseId}/quality-review`} className="underline">质量对比页</Link>选择使用决策
+                      </p>
+                    </div>
+                  </div>
+                )}
+                {qualityAssessment && qualityAssessment.user_decision && qualityAssessment.user_decision !== "pending" && caseStatus !== "delivered" && (
+                  <div className="flex items-center gap-2 text-sm p-3 rounded-md bg-green-50 border border-green-200 dark:bg-green-950/20 dark:border-green-800">
+                    <CheckCircle2 className="h-4 w-4 text-green-600 shrink-0" />
+                    <div>
+                      <p className="text-green-800 dark:text-green-200 font-medium">质量评审已完成</p>
+                      <p className="text-xs text-green-600 dark:text-green-300 mt-0.5">
+                        决策：{(qualityAssessment as { user_decision: string }).user_decision === "use_new" ? "采用新版" : (qualityAssessment as { user_decision: string }).user_decision === "use_old" ? "采用旧版" : "已选择"}
+                        {" · "}
+                        <Link href={`/admin/cases/${caseId}/quality-review`} className="underline">查看详情</Link>
+                      </p>
+                    </div>
+                  </div>
+                )}
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm font-medium">标记已交付</p>

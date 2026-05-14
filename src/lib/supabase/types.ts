@@ -236,6 +236,23 @@ export interface GenerationRun {
   created_at: string
 }
 
+export interface ResumeQualityAssessment {
+  id: string
+  case_id: string
+  old_resume_score: Record<string, unknown> | null
+  new_resume_score: Record<string, unknown> | null
+  score_delta: Record<string, unknown> | null
+  overall_conclusion: string | null
+  recommendation_level: string | null
+  improved_points: Record<string, unknown> | null
+  regressed_points: Record<string, unknown> | null
+  new_risks: Record<string, unknown> | null
+  usage_suggestions: Record<string, unknown> | null
+  user_decision: string | null
+  created_at: string
+  updated_at: string
+}
+
 export interface Database {
   public: {
     Tables: {
@@ -367,6 +384,16 @@ export interface Database {
           updated_at?: string
         }
         Update: Partial<Omit<SelectedDeliveryTarget, "id">>
+        Relationships: []
+      }
+      resume_quality_assessments: {
+        Row: ResumeQualityAssessment
+        Insert: Omit<ResumeQualityAssessment, "id" | "created_at" | "updated_at"> & {
+          id?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: Partial<Omit<ResumeQualityAssessment, "id">>
         Relationships: []
       }
     }

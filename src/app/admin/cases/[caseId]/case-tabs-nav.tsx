@@ -12,6 +12,7 @@ const tabs = [
   { key: "outputs", label: "交付物" },
   { key: "risk", label: "风险审查" },
   { key: "interview", label: "面试准备" },
+  { key: "quality-review", label: "质量对比" },
 ]
 
 export function CaseTabsNav({ caseId }: { caseId: string }) {

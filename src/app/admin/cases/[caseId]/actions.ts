@@ -13,6 +13,7 @@ import { auditRisks } from "@/lib/agents/audit-risks"
 import { generateInterviewPack } from "@/lib/agents/generate-interview-pack"
 import { applyRiskFixes } from "@/lib/agents/apply-risk-fixes"
 import { evaluateJobFit } from "@/lib/agents/evaluate-job-fit"
+import { generateQualityReview } from "@/lib/agents/generate-quality-review"
 
 export async function updateDocText(docId: string, caseId: string, rawText: string) {
   try {
@@ -854,6 +855,19 @@ export async function markDeliveredAction(caseId: string, resumeOutputId?: strin
       }
     }
 
+    const { data: qualityData } = await serviceClient
+      .from("resume_quality_assessments")
+      .select("user_decision")
+      .eq("case_id", caseId)
+      .limit(1)
+
+    const qualityArr = Array.isArray(qualityData) ? qualityData : qualityData ? [qualityData] : []
+    const userDecision = qualityArr.length > 0 ? (qualityArr[0] as Record<string, unknown>).user_decision as string : null
+
+    if (!userDecision || userDecision === "pending") {
+      return { success: false, error: "请先在质量对比页选择使用决策（采用新版/旧版/替代岗位版等）" }
+    }
+
     const { error } = await serviceClient
       .from("cases")
       .update({ status: "delivered", updated_at: new Date().toISOString() })
@@ -944,5 +958,63 @@ export async function clearPagePasswordAction(caseId: string) {
     return { success: true, message: "主页密码已清除" }
   } catch (e) {
     return { success: false, error: `清除密码异常：${e instanceof Error ? e.message : String(e)}` }
+  }
+}
+
+export async function generateQualityReviewAction(caseId: string) {
+  try {
+    const result = await generateQualityReview(caseId)
+    if (!result.success) {
+      return { success: false, error: result.error }
+    }
+    revalidatePath(`/admin/cases/${caseId}`)
+    revalidatePath(`/admin/cases/${caseId}/quality-review`)
+    return { success: true, message: result.message }
+  } catch (e) {
+    return { success: false, error: `生成质量评审异常：${e instanceof Error ? e.message : String(e)}` }
+  }
+}
+
+export async function submitUserDecisionAction(caseId: string, decision: string) {
+  try {
+    const validDecisions = ["use_new", "use_old", "generate_alternative_role", "force_target_version", "request_revision"]
+    if (!validDecisions.includes(decision)) {
+      return { success: false, error: "无效的决策类型" }
+    }
+
+    const { data: existing } = await serviceClient
+      .from("resume_quality_assessments")
+      .select("id")
+      .eq("case_id", caseId)
+      .limit(1)
+
+    const existingArr = Array.isArray(existing) ? existing : existing ? [existing] : []
+
+    if (existingArr.length > 0) {
+      const { error } = await serviceClient
+        .from("resume_quality_assessments")
+        .update({ user_decision: decision, updated_at: new Date().toISOString() })
+        .eq("case_id", caseId)
+
+      if (error) {
+        return { success: false, error: `保存决策失败：${normalizeError(error)}` }
+      }
+    } else {
+      const { error } = await serviceClient
+        .from("resume_quality_assessments")
+        .insert({
+          case_id: caseId,
+          user_decision: decision,
+        })
+
+      if (error) {
+        return { success: false, error: `保存决策失败：${normalizeError(error)}` }
+      }
+    }
+
+    revalidatePath(`/admin/cases/${caseId}/quality-review`)
+    return { success: true, message: "决策已保存" }
+  } catch (e) {
+    return { success: false, error: `保存决策异常：${e instanceof Error ? e.message : String(e)}` }
   }
 }

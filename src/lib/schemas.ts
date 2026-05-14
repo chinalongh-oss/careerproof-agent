@@ -232,6 +232,53 @@ export const ProfilePageSchema = z.object({
 
 export type ProfilePageOutput = z.infer<typeof ProfilePageSchema>
 
+export const QualityReviewScoreItemSchema = z.object({
+  dimension: z.string(),
+  score: z.number().min(0).max(100),
+  comment: z.string().optional(),
+})
+
+export const QualityReviewScoreBlockSchema = z.object({
+  overall: z.number().min(0).max(100).optional(),
+  dimensions: z.array(QualityReviewScoreItemSchema).optional(),
+  summary: z.string().optional(),
+})
+
+export const QualityReviewDeltaSchema = z.object({
+  overall_diff: z.number().optional(),
+  dimension_diffs: z.array(z.object({
+    dimension: z.string(),
+    old_score: z.number().optional(),
+    new_score: z.number().optional(),
+    diff: z.number(),
+    comment: z.string().optional(),
+  })).optional(),
+})
+
+export const ResumeQualityAssessmentSchema = z.object({
+  old_resume_score: QualityReviewScoreBlockSchema.optional(),
+  new_resume_score: QualityReviewScoreBlockSchema.optional(),
+  score_delta: QualityReviewDeltaSchema.optional(),
+  overall_conclusion: z.string(),
+  recommendation_level: z.enum(["recommended", "use_with_caution", "not_recommended", "high_risk_trial"]),
+  improved_points: z.array(z.object({
+    point: z.string(),
+    impact: z.string().optional(),
+  })),
+  regressed_points: z.array(z.object({
+    point: z.string(),
+    impact: z.string().optional(),
+  })),
+  new_risks: z.array(z.object({
+    risk: z.string(),
+    severity: z.string().optional(),
+    suggestion: z.string().optional(),
+  })),
+  usage_suggestions: z.array(z.string()),
+})
+
+export type ResumeQualityAssessmentOutput = z.infer<typeof ResumeQualityAssessmentSchema>
+
 export const SCHEMA_REGISTRY = {
   resume_parse: ResumeParseSchema,
   evidence_cards: EvidenceCardsOutputSchema,
@@ -244,6 +291,7 @@ export const SCHEMA_REGISTRY = {
   interview_pack: InterviewPackSchema,
   smoke_test: SmokeTestSchema,
   job_fit_assessment: JobFitAssessmentSchema,
+  resume_quality_assessment: ResumeQualityAssessmentSchema,
 } as const
 
 export type SchemaName = keyof typeof SCHEMA_REGISTRY

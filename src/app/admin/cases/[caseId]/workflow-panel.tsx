@@ -17,6 +17,7 @@ import {
   Target,
   Layout,
   Loader2,
+  FileSearch,
 } from "lucide-react"
 import {
   parseResumeAction,
@@ -28,6 +29,7 @@ import {
   auditRisksAction,
   generateInterviewPackAction,
   evaluateJobFitAction,
+  generateQualityReviewAction,
 } from "./actions"
 
 const actions = [
@@ -40,6 +42,7 @@ const actions = [
   { key: "generate_outputs", label: "生成简历和主页", icon: Layout, requires: "positioning_ready" },
   { key: "run_risk", label: "运行风险审查", icon: ShieldAlert, requires: "outputs_ready" },
   { key: "generate_interview", label: "生成面试准备包", icon: MessageSquare, requires: "risk_reviewed" },
+  { key: "generate_quality_review", label: "新旧简历质量对比", icon: FileSearch, requires: "outputs_ready" },
 ]
 
 const statusOrder = [
@@ -60,6 +63,7 @@ export function WorkflowPanel({ caseId, currentStatus }: { caseId: string; curre
   const [interviewPending, setInterviewPending] = useState(false)
   const [fitPending, setFitPending] = useState(false)
   const [exportPdfPending, setExportPdfPending] = useState(false)
+  const [qualityReviewPending, setQualityReviewPending] = useState(false)
 
   function isAvailable(requires: string) {
     if (currentIdx < 0) return false
@@ -220,6 +224,23 @@ export function WorkflowPanel({ caseId, currentStatus }: { caseId: string; curre
     }
   }
 
+  async function handleQualityReview() {
+    setQualityReviewPending(true)
+    try {
+      const result = await generateQualityReviewAction(caseId)
+      if (result.success) {
+        toast.success(result.message || "质量对比评审完成")
+        router.refresh()
+      } else {
+        toast.error(result.error || "质量对比评审失败")
+      }
+    } catch (e) {
+      toast.error(`评审异常：${e instanceof Error ? e.message : String(e)}`)
+    } finally {
+      setQualityReviewPending(false)
+    }
+  }
+
   async function handleExportPdf() {
     setExportPdfPending(true)
     try {
@@ -266,6 +287,9 @@ export function WorkflowPanel({ caseId, currentStatus }: { caseId: string; curre
       case "evaluate_job_fit":
         handleEvaluateFit()
         break
+      case "generate_quality_review":
+        handleQualityReview()
+        break
       default:
         toast.info("该功能将在后续版本实现")
     }
@@ -297,7 +321,8 @@ export function WorkflowPanel({ caseId, currentStatus }: { caseId: string; curre
             (action.key === "evaluate_job_fit" && fitPending) ||
             (action.key === "generate_outputs" && outputsPending) ||
             (action.key === "run_risk" && riskPending) ||
-            (action.key === "generate_interview" && interviewPending)
+            (action.key === "generate_interview" && interviewPending) ||
+            (action.key === "generate_quality_review" && qualityReviewPending)
 
           return (
             <WorkflowBtn

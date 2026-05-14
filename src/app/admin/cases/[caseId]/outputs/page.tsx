@@ -2,7 +2,7 @@ import { Suspense } from "react"
 import { notFound } from "next/navigation"
 import { serviceClient } from "@/lib/supabase/service"
 import { OutputsClient } from "./outputs-client"
-import type { JobFitAssessment, SelectedDeliveryTarget } from "@/lib/supabase/types"
+import type { JobFitAssessment, SelectedDeliveryTarget, ResumeQualityAssessment } from "@/lib/supabase/types"
 
 export default async function OutputsPage({
   params,
@@ -80,6 +80,15 @@ export default async function OutputsPage({
 
   const deliveryTargets = Array.isArray(dtData) ? dtData as SelectedDeliveryTarget[] : dtData ? [dtData as SelectedDeliveryTarget] : []
 
+  const { data: qualityData } = await serviceClient
+    .from("resume_quality_assessments")
+    .select("*")
+    .eq("case_id", caseId)
+    .limit(1)
+
+  const qualityArr = Array.isArray(qualityData) ? qualityData : qualityData ? [qualityData] : []
+  const qualityAssessment = qualityArr[0] as ResumeQualityAssessment | null ?? null
+
   return (
     <Suspense fallback={<div className="py-12 text-center text-muted-foreground">加载中...</div>}>
       <OutputsClient
@@ -97,6 +106,7 @@ export default async function OutputsPage({
         jdData={jdData}
         jobFitAssessment={fitData as JobFitAssessment | null}
         deliveryTargets={deliveryTargets}
+        qualityAssessment={qualityAssessment}
       />
     </Suspense>
   )
