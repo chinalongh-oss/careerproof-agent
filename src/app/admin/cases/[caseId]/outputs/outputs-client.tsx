@@ -25,6 +25,8 @@ type OutputRow = {
   content: unknown
   markdown: string | null
   version: number
+  delivery_variant_key: string | null
+  is_current: boolean | null
   created_at: string
 }
 
@@ -71,6 +73,7 @@ interface Props {
   targetRole: string | null
   caseStatus: string
   resumeOutputs: OutputRow[]
+  currentResumeOutputs: OutputRow[]
   diagnosticOutput: OutputRow | null
   profileOutput: OutputRow | null
   publicPage: PublicPageRow
@@ -87,7 +90,7 @@ const THEME_OPTIONS = [
   { value: "headhunter_quickview", label: "Headhunter Quick View - 猎头速览" },
 ]
 
-export function OutputsClient({ caseId, candidateName, targetRole, caseStatus, resumeOutputs, diagnosticOutput, profileOutput, publicPage, recentArtifact, interviewPack, jdData, jobFitAssessment, deliveryTargets }: Props) {
+export function OutputsClient({ caseId, candidateName, targetRole, caseStatus, resumeOutputs, currentResumeOutputs, diagnosticOutput, profileOutput, publicPage, recentArtifact, interviewPack, jdData, jobFitAssessment, deliveryTargets }: Props) {
   const searchParams = useSearchParams()
   const [activeTab, setActiveTab] = useState(searchParams.get("tab") ?? "resume")
 
@@ -133,6 +136,26 @@ export function OutputsClient({ caseId, candidateName, targetRole, caseStatus, r
   const isLowFit = fitLevel === "low" || fitLevel === "no_fit"
   const showFitWarning = jobFitAssessment && fitLevel !== "high"
   const needsForceGenerate = isLowFit && !anyTarget
+
+  const currentTargetVariantKeys = checkedTargets.map(t => {
+    if (t.mode === "full_resume" && t.role) return `full_resume::${t.role}`
+    if (t.mode === "forced_target_resume") return `forced_target_resume::${targetRole ?? ""}`
+    if (t.mode === "diagnostic_report") return "diagnostic_report::job_fit_diagnostic"
+    return ""
+  }).filter(Boolean)
+
+  const deliveryResumeOutputs = currentResumeOutputs.filter(
+    (r) => currentTargetVariantKeys.includes(r.delivery_variant_key ?? "")
+  )
+
+  const hasCurrentVariantOutputs = anyTarget
+    ? deliveryResumeOutputs.length > 0
+    : currentResumeOutputs.length > 0
+
+  const staleDeliveryWarning = anyTarget && currentResumeOutputs.length > 0 && !hasCurrentVariantOutputs
+
+  const [selectedDeliveryResumeId] = useState(deliveryResumeOutputs[0]?.id ?? "")
+  const selectedDeliveryResume = deliveryResumeOutputs.find((r) => r.id === selectedDeliveryResumeId) ?? deliveryResumeOutputs[0] ?? null
 
   const reloadPreservingTab = useCallback((tab?: string) => {
     const t = tab ?? activeTab
@@ -334,7 +357,7 @@ export function OutputsClient({ caseId, candidateName, targetRole, caseStatus, r
   async function handleMarkDelivered() {
     setMarkingDelivered(true)
     try {
-      const result = await markDeliveredAction(caseId, selectedResume?.id)
+      const result = await markDeliveredAction(caseId, selectedDeliveryResume?.id)
       if (result.success) {
         toast.success("已标记为已交付")
         window.location.reload()
@@ -467,13 +490,22 @@ export function OutputsClient({ caseId, candidateName, targetRole, caseStatus, r
         </div>
 
         {anyTarget && (
-          <div className="bg-muted p-2 rounded text-xs">
+          <div className="bg-muted p-2 rounded text-xs space-y-2">
             <p className="text-muted-foreground">
               当前选择：
               {hasAltRoles && <span className="font-medium ml-1">{altRoleTargets.length} 个替代岗位简历</span>}
               {hasForcedTarget && <span className="font-medium ml-1">· 目标 JD 尝试版</span>}
               {hasDiagnostic && <span className="font-medium ml-1">· 诊断报告</span>}
             </p>
+            {staleDeliveryWarning && (
+              <p className="text-destructive font-medium">
+                交付目标已变更，当前交付包不是最新，请重新生成。
+              </p>
+            )}
+            <Button size="sm" variant="secondary" onClick={() => handleGenerate(true)} disabled={generating}>
+              {generating ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5 mr-1" />}
+              {generating ? "生成中..." : "按当前选择重新生成交付包"}
+            </Button>
           </div>
         )}
       </CardContent>
@@ -1057,11 +1089,10 @@ export function OutputsClient({ caseId, candidateName, targetRole, caseStatus, r
                 <Package className="h-5 w-5" />
                 交付包
               </CardTitle>
-              <CardDescription>将所有交付物打包，准备发送给候选人</CardDescription>
+              <CardDescription>按当前交付目标筛选的交付物</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              {/* PDF 简历 - 每个版本一张卡 */}
-              {resumeOutputs.map((r) => (
+              {deliveryResumeOutputs.map((r) => (
                 <div key={r.id} className="flex items-center justify-between border rounded-lg p-4">
                   <div className="flex items-center gap-3">
                     <div className="bg-red-50 p-2 rounded">
@@ -1104,7 +1135,7 @@ export function OutputsClient({ caseId, candidateName, targetRole, caseStatus, r
                 </div>
               ))}
 
-              {resumeOutputs.length === 0 && (
+              {deliveryResumeOutputs.length === 0 && (
                 <div className="flex items-center justify-between border rounded-lg p-4">
                   <div className="flex items-center gap-3">
                     <div className="bg-red-50 p-2 rounded">
@@ -1112,7 +1143,7 @@ export function OutputsClient({ caseId, candidateName, targetRole, caseStatus, r
                     </div>
                     <div>
                       <p className="text-sm font-medium">PDF 简历</p>
-                      <p className="text-xs text-muted-foreground">尚未生成</p>
+                      <p className="text-xs text-muted-foreground">尚未生成当前交付目标的简历</p>
                     </div>
                   </div>
                   <Badge variant="secondary" className="text-xs">请先生成简历</Badge>

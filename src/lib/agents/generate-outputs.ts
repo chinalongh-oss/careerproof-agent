@@ -7,10 +7,19 @@ import { GENERATE_RESUME_OUTPUT_USER_PROMPT } from "@/lib/prompts/agents/generat
 import { GENERATE_PROFILE_PAGE_USER_PROMPT } from "@/lib/prompts/agents/generate-profile-page"
 import { serviceClient, normalizeError } from "@/lib/supabase/service"
 
+interface ResumeTarget {
+  deliveryMode: string
+  targetRole: string
+  label: string
+  variantKey: string
+  directive: string
+  fitReason: string | null
+}
+
 export async function generateOutputs(caseId: string, forceRegenerate = false, forceGenerate = false) {
   const { data: existingOutputs } = await serviceClient
     .from("generated_outputs")
-    .select("output_type,version,title,markdown,content,created_at")
+    .select("output_type,version,title,markdown,content,created_at,delivery_variant_key,is_current")
     .eq("case_id", caseId)
     .order("version", { ascending: false })
 
@@ -195,60 +204,38 @@ export async function generateOutputs(caseId: string, forceRegenerate = false, f
     "{{target_role}}": (jd as Record<string, unknown>).role_name as string || "",
   }
 
-  // --- JD Fit Gate ---
   if (!fitAssessment) {
     return { success: false, error: "请先完成岗位适配判断" }
   }
-  let deliveryMode = (fitAssessment.recommended_delivery_mode as string) ?? ""
   const fitLevel = (fitAssessment.fit_level as string) ?? ""
+  const recommendedDeliveryMode = (fitAssessment.recommended_delivery_mode as string) ?? ""
 
-  if (!deliveryMode || !fitLevel) {
+  if (!fitLevel) {
     return { success: false, error: "岗位适配判断数据不完整，请重新执行岗位适配判断" }
   }
 
-  const target = targetsArr.length > 0 ? targetsArr[0] : null
-  const userChoseForcedTarget = target?.delivery_mode === "forced_target_resume" && target?.risk_acknowledged === true
-  const userChoseAltRole = target?.delivery_mode === "full_resume" && typeof target?.target_role === "string" && (target?.target_role as string).length > 0
-  const userChoseDiagnostic = target?.delivery_mode === "diagnostic_report"
-  const userChoseDeliveryTarget = target != null
-  const hasDiagnosticTarget = targetsArr.some(t => t.delivery_mode === "diagnostic_report")
   const hasForcedTargetSelected = targetsArr.some(t => t.delivery_mode === "forced_target_resume")
+  const hasDiagnosticTarget = targetsArr.some(t => t.delivery_mode === "diagnostic_report")
   const fitStr = JSON.stringify(fitAssessment ?? {}, null, 2)
 
-  if (userChoseForcedTarget) {
-    deliveryMode = "forced_target_resume"
-  }
-
-  if (userChoseAltRole) {
-    deliveryMode = "full_resume"
-  }
-
-  // If user has explicitly selected delivery targets, skip fit gate blocking
   if (targetsArr.length === 0) {
-    if (!forceGenerate && !userChoseDeliveryTarget && deliveryMode === "reject_direct_application") {
+    if (!forceGenerate && recommendedDeliveryMode === "reject_direct_application") {
       return {
         success: false,
         error: `岗位适配判断为 no_fit，不建议为当前 JD 生成简历。建议在下方选择交付目标（替代岗位 / 诊断报告），或使用强制模式。`,
       }
     }
 
-    if (!forceGenerate && !userChoseDeliveryTarget && deliveryMode === "diagnostic_report" && fitLevel !== "medium") {
+    if (!forceGenerate && recommendedDeliveryMode === "diagnostic_report" && fitLevel !== "medium") {
       return {
         success: false,
         error: `岗位适配判断为 ${fitLevel}，推荐交付模式为 diagnostic_report。请在下方选择交付目标，或使用强制模式。`,
       }
     }
-
-    if (userChoseDiagnostic) {
-      return {
-        success: false,
-        error: `当前选择"仅生成诊断报告"，系统不生成正式简历。请返回选择其他交付目标。`,
-      }
-    }
   }
 
   let fitGateDirective = ""
-  if (hasForcedTargetSelected || deliveryMode === "forced_target_resume") {
+  if (hasForcedTargetSelected || recommendedDeliveryMode === "forced_target_resume") {
     fitGateDirective = `
 
 ## ⚠️ 岗位适配约束 — 目标 JD 尝试版（forced_target_resume）
@@ -270,12 +257,12 @@ export async function generateOutputs(caseId: string, forceRegenerate = false, f
 
 此交付物属于**目标 JD 尝试版**，不是正式高匹配版。
 `
-  } else if (deliveryMode !== "full_resume") {
+  } else if (recommendedDeliveryMode !== "full_resume") {
     fitGateDirective = `
 
 ## ⚠️ 岗位适配约束（必须遵守）
 
-推荐交付模式：${deliveryMode}
+推荐交付模式：${recommendedDeliveryMode}
 岗位匹配等级：${fitLevel}
 
 ### 约束规则：
@@ -291,7 +278,7 @@ export async function generateOutputs(caseId: string, forceRegenerate = false, f
 `
   }
 
-  if (forceGenerate && (deliveryMode === "diagnostic_report" || deliveryMode === "reject_direct_application")) {
+  if (forceGenerate && (recommendedDeliveryMode === "diagnostic_report" || recommendedDeliveryMode === "reject_direct_application")) {
     fitGateDirective += `
 
 ## ⚠️ 强制生成模式（附加风险）
@@ -302,6 +289,8 @@ export async function generateOutputs(caseId: string, forceRegenerate = false, f
 2. 在 trust_notes 中明确标注"此简历为强制生成，存在 JD 过度匹配风险"
 `
   }
+
+  const originalJdRole = (jd as Record<string, unknown>).role_name as string || ""
 
   // --- 1. Generate profile_page (once) ---
   const profileUserPrompt = Object.entries(commonReplacements).reduce(
@@ -343,28 +332,33 @@ export async function generateOutputs(caseId: string, forceRegenerate = false, f
     prompt_version: PROMPT_VERSION,
   }
 
-  // --- 2. Determine resume targets ---
-  interface ResumeTarget {
-    label: string
-    targetRole: string
-    fitDirective: string
-  }
+  // --- 2. Build ResumeTargets from selected_delivery_targets ---
   const resumeTargets: ResumeTarget[] = []
 
   for (const t of targetsArr) {
     const dm = t.delivery_mode as string
     const tr = t.target_role as string | null
+
     if (dm === "full_resume" && tr) {
+      const altRoles = fitAssessment?.alternative_roles as Array<{ role?: string; fit_reason?: string }> | undefined
+      const fitReason = altRoles?.find(a => a.role === tr)?.fit_reason ?? null
+
       resumeTargets.push({
-        label: `替代岗位: ${tr}`,
+        deliveryMode: "full_resume",
         targetRole: tr,
-        fitDirective: "",
+        label: `替代岗位: ${tr}`,
+        variantKey: `full_resume::${tr}`,
+        directive: `\n\n## ⚠️ 替代岗位正式简历指令\n\n这是替代岗位正式简历，请以该替代岗位为目标重组经历，不要继续按原始 AI coding JD 强行优化，不得编造 AI coding / LLM / 开发者工具经验。\n\n目标替代岗位：${tr}\n`,
+        fitReason,
       })
     } else if (dm === "forced_target_resume") {
       resumeTargets.push({
+        deliveryMode: "forced_target_resume",
+        targetRole: originalJdRole,
         label: "目标 JD 尝试版",
-        targetRole: (jd as Record<string, unknown>).role_name as string || "",
-        fitDirective: fitGateDirective,
+        variantKey: `forced_target_resume::${originalJdRole}`,
+        directive: fitGateDirective,
+        fitReason: null,
       })
     }
   }
@@ -372,26 +366,45 @@ export async function generateOutputs(caseId: string, forceRegenerate = false, f
   // Fallback: no targets selected, generate one default resume
   if (resumeTargets.length === 0 && targetsArr.length === 0) {
     resumeTargets.push({
+      deliveryMode: "full_resume",
+      targetRole: originalJdRole,
       label: "标准版",
-      targetRole: (jd as Record<string, unknown>).role_name as string || "",
-      fitDirective: deliveryMode !== "full_resume" ? fitGateDirective : "",
+      variantKey: `full_resume::${originalJdRole}`,
+      directive: recommendedDeliveryMode !== "full_resume" ? fitGateDirective : "",
+      fitReason: null,
     })
   }
 
-  // --- 3. Generate resumes ---
+  // --- 3. Generate resumes: for each target, invalidate old then insert new ---
   const generatedResumes: Array<{
     title: string | null
     markdown: string
     content: Record<string, unknown> | null
+    deliveryMode: string
+    targetRole: string
+    variantKey: string
   }> = []
 
   for (const rt of resumeTargets) {
+    // Set old versions of this variant to is_current = false
+    const { error: invalidateError } = await serviceClient
+      .from("generated_outputs")
+      .update({ is_current: false })
+      .eq("case_id", caseId)
+      .eq("output_type", "resume_markdown")
+      .eq("delivery_variant_key", rt.variantKey)
+      .eq("is_current", true)
+
+    if (invalidateError) {
+      return { success: false, error: `更新旧版本状态失败：${normalizeError(invalidateError)}` }
+    }
+
     const replMap = { ...commonReplacements }
     replMap["{{target_role}}"] = rt.targetRole
     const prompt = Object.entries(replMap).reduce(
       (p, [k, v]) => p.replace(k, v),
       GENERATE_RESUME_OUTPUT_USER_PROMPT
-    ) + rt.fitDirective
+    ) + rt.directive
 
     const res = await generateStructuredOutput({
       agent_name: "generate_outputs_resume",
@@ -412,6 +425,9 @@ export async function generateOutputs(caseId: string, forceRegenerate = false, f
       title: `【${rt.label}】${res.data.title ?? ""}`,
       markdown: res.data.markdown,
       content: (res.data.sections ?? null) as Record<string, unknown> | null,
+      deliveryMode: rt.deliveryMode,
+      targetRole: rt.targetRole,
+      variantKey: rt.variantKey,
     })
   }
 
@@ -419,6 +435,15 @@ export async function generateOutputs(caseId: string, forceRegenerate = false, f
   let diagnosticReport: { title: string; markdown: string } | null = null
 
   if (hasDiagnosticTarget) {
+    // Invalidate old diagnostic_report for this case
+    await serviceClient
+      .from("generated_outputs")
+      .update({ is_current: false })
+      .eq("case_id", caseId)
+      .eq("output_type", "diagnostic_report")
+      .eq("delivery_variant_key", "diagnostic_report::job_fit_diagnostic")
+      .eq("is_current", true)
+
     const diagnosticPrompt = `请基于以下信息生成一份诊断报告：
 
 ## 岗位适配评估
@@ -456,15 +481,7 @@ ${cardsStr}
     }
   }
 
-  // --- 5. Determine version ---
-  let resumeVersion = 1
-  for (const row of outputsArr) {
-    if (row.output_type === "resume_markdown" && row.version >= resumeVersion) {
-      resumeVersion = row.version + 1
-    }
-  }
-
-  // --- 6. Insert all ---
+  // --- 5. Insert all outputs with is_current = true ---
   const outputsToInsert: Array<{
     case_id: string
     output_type: string
@@ -474,7 +491,26 @@ ${cardsStr}
     version: number
     template_id: null
     prompt_version: string
-  }> = [profileToInsert]
+    delivery_mode: string | null
+    target_role: string | null
+    delivery_variant_key: string | null
+    is_current: boolean
+  }> = [
+    {
+      ...profileToInsert,
+      delivery_mode: null,
+      target_role: null,
+      delivery_variant_key: null,
+      is_current: true,
+    },
+  ]
+
+  let resumeVersion = 1
+  for (const row of outputsArr) {
+    if (row.output_type === "resume_markdown" && row.version >= resumeVersion) {
+      resumeVersion = row.version + 1
+    }
+  }
 
   for (let i = 0; i < generatedResumes.length; i++) {
     outputsToInsert.push({
@@ -486,6 +522,10 @@ ${cardsStr}
       version: resumeVersion + i,
       template_id: null,
       prompt_version: PROMPT_VERSION,
+      delivery_mode: generatedResumes[i].deliveryMode,
+      target_role: generatedResumes[i].targetRole,
+      delivery_variant_key: generatedResumes[i].variantKey,
+      is_current: true,
     })
   }
 
@@ -505,6 +545,10 @@ ${cardsStr}
       version: diagVersion,
       template_id: null,
       prompt_version: PROMPT_VERSION,
+      delivery_mode: "diagnostic_report",
+      target_role: null,
+      delivery_variant_key: "diagnostic_report::job_fit_diagnostic",
+      is_current: true,
     })
   }
 
@@ -516,7 +560,8 @@ ${cardsStr}
     return { success: false, error: `保存生成结果失败：${normalizeError(insertError)}` }
   }
 
-  if (hasForcedTargetSelected || deliveryMode === "forced_target_resume") {
+  // --- 6. Risk issues for forced target ---
+  if (hasForcedTargetSelected) {
     const forceRiskIssues: Array<{
       case_id: string
       output_id: null
@@ -581,7 +626,7 @@ ${cardsStr}
       },
     ]
     await serviceClient.from("risk_issues").insert(forceRiskIssues as Record<string, unknown>[])
-  } else if (forceGenerate && deliveryMode !== "full_resume") {
+  } else if (forceGenerate && recommendedDeliveryMode !== "full_resume") {
     const forceRiskIssues: Array<{
       case_id: string
       output_id: null
@@ -599,17 +644,17 @@ ${cardsStr}
         case_id: caseId,
         output_id: null,
         source_type: "resume_markdown",
-        source_text: `强制生成模式：岗位匹配等级 ${fitLevel}，推荐交付模式 ${deliveryMode}`,
+        source_text: `强制生成模式：岗位匹配等级 ${fitLevel}，推荐交付模式 ${recommendedDeliveryMode}`,
         risk_type: "jd_overfit",
         risk_level: "high",
-        reason: `候选人与目标 JD 匹配度为 ${fitLevel}，系统推荐交付模式为 ${deliveryMode}。用户选择强制生成正式简历，存在岗位过度匹配风险，可能导致面试时被质疑。`,
+        reason: `候选人与目标 JD 匹配度为 ${fitLevel}，系统推荐交付模式为 ${recommendedDeliveryMode}。用户选择强制生成正式简历，存在岗位过度匹配风险，可能导致面试时被质疑。`,
         suggestion: "建议使用诊断报告或迁移型简历，诚实呈现可迁移能力而非强行包装为专业经验。",
         safer_rewrite: (fitAssessment?.safe_positioning_statement as string) ?? "基于可迁移能力的职业定位",
         risk_source: "system_gate",
         status: "open",
       },
     ]
-    if (deliveryMode === "diagnostic_report" || deliveryMode === "reject_direct_application") {
+    if (recommendedDeliveryMode === "diagnostic_report" || recommendedDeliveryMode === "reject_direct_application") {
       forceRiskIssues.push({
         case_id: caseId,
         output_id: null,

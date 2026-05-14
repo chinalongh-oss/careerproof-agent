@@ -289,7 +289,7 @@ export async function saveOutputAction(
   try {
     const { data: allVersions } = await serviceClient
       .from("generated_outputs")
-      .select("version,content,template_id,prompt_version")
+      .select("version,content,template_id,prompt_version,is_current,delivery_mode,target_role,delivery_variant_key")
       .eq("case_id", caseId)
       .eq("output_type", outputType)
       .order("version", { ascending: false })
@@ -305,6 +305,23 @@ export async function saveOutputAction(
     const existingTemplateId = versions.length > 0 ? versions[0].template_id : null
     const existingPromptVersion = versions.length > 0 ? versions[0].prompt_version : "manual_edit"
 
+    const currentVariant = versions.find(
+      (v) => v.is_current === true
+    )
+    const existingDeliveryMode = (currentVariant as Record<string, unknown> | null)?.delivery_mode as string | null ?? null
+    const existingTargetRole = (currentVariant as Record<string, unknown> | null)?.target_role as string | null ?? null
+    const existingVariantKey = (currentVariant as Record<string, unknown> | null)?.delivery_variant_key as string | null ?? null
+
+    if (existingVariantKey) {
+      await serviceClient
+        .from("generated_outputs")
+        .update({ is_current: false })
+        .eq("case_id", caseId)
+        .eq("output_type", outputType)
+        .eq("delivery_variant_key", existingVariantKey)
+        .eq("is_current", true)
+    }
+
     const { error: insertError } = await serviceClient
       .from("generated_outputs")
       .insert({
@@ -316,6 +333,10 @@ export async function saveOutputAction(
         version: newVersion,
         template_id: existingTemplateId,
         prompt_version: existingPromptVersion,
+        delivery_mode: existingDeliveryMode,
+        target_role: existingTargetRole,
+        delivery_variant_key: existingVariantKey,
+        is_current: true,
       })
 
     if (insertError) {
@@ -744,6 +765,18 @@ export async function markDeliveredAction(caseId: string, resumeOutputId?: strin
     }
 
     const effectiveResumeId = resumeOutputId ?? latestResume.id
+
+    const { data: resumeOutput } = await serviceClient
+      .from("generated_outputs")
+      .select("is_current")
+      .eq("id", effectiveResumeId)
+      .eq("case_id", caseId)
+      .single()
+
+    const outputRow = resumeOutput as Record<string, unknown> | null
+    if (!outputRow || !outputRow.is_current) {
+      return { success: false, error: "当前简历版本不是最新交付版本，请重新生成交付包" }
+    }
 
     const { data: artifacts } = await serviceClient
       .from("export_artifacts")

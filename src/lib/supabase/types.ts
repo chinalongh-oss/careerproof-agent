@@ -138,6 +138,10 @@ export interface GeneratedOutput {
   version: number
   template_id: string | null
   prompt_version: string | null
+  delivery_mode: string | null
+  target_role: string | null
+  delivery_variant_key: string | null
+  is_current: boolean
   created_at: string
 }
 

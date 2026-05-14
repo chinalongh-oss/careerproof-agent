@@ -147,25 +147,6 @@ export function normalizePersonalInfo(
   }
 }
 
-const BODY_SECTION_TITLES = [
-  "个人简介",
-  "职业简介",
-  "核心能力",
-  "工作经历",
-  "代表项目",
-  "项目经历",
-  "教育背景",
-  "技能",
-  "技能 / 工具",
-  "技能/工具",
-  "专业能力",
-  "工作经验",
-  "职业经历",
-  "工作履历",
-  "项目经验",
-  "重点项目",
-]
-
 const IDENTITY_LINE_PATTERNS = [
   /^#\s+\S/,
   /^##\s+\S/,
@@ -205,13 +186,9 @@ export function stripMarkdownIdentityBlock(markdown: string | null | undefined):
   let firstBodyIndex = -1
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim()
-    const headingMatch = line.match(/^##\s+(.+)/)
-    if (headingMatch) {
-      const title = headingMatch[1].trim()
-      if (BODY_SECTION_TITLES.includes(title)) {
-        firstBodyIndex = i
-        break
-      }
+    if (/^##\s+\S/.test(line)) {
+      firstBodyIndex = i
+      break
     }
   }
 

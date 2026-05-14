@@ -29,8 +29,12 @@ export default async function OutputsPage({
 
   const resumeOutputs = allOutputs.filter((o) => o.output_type === "resume_markdown")
   const profileOutput = allOutputs.find((o) => o.output_type === "profile_page") ?? null
-  const diagnosticOutput = allOutputs.find((o) => o.output_type === "diagnostic_report") ?? null
+  const diagnosticOutput = allOutputs.find((o) => o.output_type === "diagnostic_report" && o.is_current === true) ?? null
   const interviewPack = allOutputs.find((o) => o.output_type === "interview_pack") ?? null
+
+  const currentResumeOutputs = allOutputs.filter(
+    (o) => o.output_type === "resume_markdown" && o.is_current === true
+  )
 
   const { data: publicPage } = await serviceClient
     .from("public_pages")
@@ -84,6 +88,7 @@ export default async function OutputsPage({
         targetRole={targetRole}
         caseStatus={(caseData as Record<string, unknown>).status as string}
         resumeOutputs={resumeOutputs}
+        currentResumeOutputs={currentResumeOutputs}
         diagnosticOutput={diagnosticOutput}
         profileOutput={profileOutput}
         publicPage={currentPublicPage}
