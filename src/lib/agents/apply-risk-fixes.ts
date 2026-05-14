@@ -21,7 +21,7 @@ export async function applyRiskFixes(caseId: string) {
 
   const { data: resumeOutputs } = await serviceClient
     .from("generated_outputs")
-    .select("id,markdown,version,title,content,template_id,prompt_version")
+    .select("id,markdown,version,title,content,template_id,prompt_version,delivery_mode,target_role,delivery_variant_key,is_current")
     .eq("case_id", caseId)
     .eq("output_type", "resume_markdown")
     .order("version", { ascending: false })
@@ -32,7 +32,7 @@ export async function applyRiskFixes(caseId: string) {
 
   const { data: profileOutputs } = await serviceClient
     .from("generated_outputs")
-    .select("id,markdown,version,title,content,template_id,prompt_version")
+    .select("id,markdown,version,title,content,template_id,prompt_version,delivery_mode,target_role,delivery_variant_key,is_current")
     .eq("case_id", caseId)
     .eq("output_type", "profile_page")
     .order("version", { ascending: false })
@@ -106,7 +106,12 @@ export async function applyRiskFixes(caseId: string) {
   if (unmatchedIssues.length > 0) {
     const result = await generateOutputs(caseId, true)
     if (!result.success) {
-      return { success: false, error: `部分风险建议无法直接匹配，重新生成失败：${result.error}` }
+      return {
+        success: false,
+        error: `部分风险建议无法直接匹配，重新生成也失败：${result.error}`,
+        unmatched_count: unmatchedIssues.length,
+        unmatched_source_texts: unmatchedIssues.map((i) => (i.source_text ?? "").slice(0, 120)),
+      }
     }
 
     const { data: newResume } = await serviceClient
@@ -120,22 +125,24 @@ export async function applyRiskFixes(caseId: string) {
     const newResumeArr = Array.isArray(newResume) ? newResume : newResume ? [newResume] : []
     const newResumeMd = newResumeArr[0]?.markdown ?? ""
 
+    const stillUnmatched: typeof unmatchedIssues = []
     for (const issue of unmatchedIssues) {
       const sourceText = issue.source_text as string | null
       if (sourceText && newResumeMd.includes(sourceText)) {
-        return {
-          success: false,
-          error: `重新生成后风险点 "${sourceText.slice(0, 80)}..." 仍然存在，请手动处理`,
-        }
+        stillUnmatched.push(issue)
       }
     }
 
-    for (const issue of unmatchedIssues) {
-      await serviceClient
-        .from("risk_issues")
-        .update({ status: "applied" })
-        .eq("id", issue.id)
-        .eq("case_id", caseId)
+    if (stillUnmatched.length > 0) {
+      return {
+        success: false,
+        error: `重新生成后仍有 ${stillUnmatched.length} 条风险原文仍然存在，需手动处理`,
+        needs_manual_edit: stillUnmatched.map((i) => ({
+          id: i.id,
+          risk_type: i.risk_type,
+          source_text: (i.source_text ?? "").slice(0, 200),
+        })),
+      }
     }
 
     return {
@@ -156,10 +163,34 @@ export async function applyRiskFixes(caseId: string) {
       version: number
       template_id: string | null
       prompt_version: string | null
+      delivery_mode: string | null
+      target_role: string | null
+      delivery_variant_key: string | null
+      is_current: boolean
     }[] = []
 
     if (resumePatched && resumeMarkdown && latestResume) {
       const newVersion = latestResume.version + 1
+
+      const resumeVariantKey = (latestResume as Record<string, unknown>).delivery_variant_key as string | null
+      if (resumeVariantKey) {
+        await serviceClient
+          .from("generated_outputs")
+          .update({ is_current: false })
+          .eq("case_id", caseId)
+          .eq("output_type", "resume_markdown")
+          .eq("delivery_variant_key", resumeVariantKey)
+          .eq("is_current", true)
+      } else {
+        await serviceClient
+          .from("generated_outputs")
+          .update({ is_current: false })
+          .eq("case_id", caseId)
+          .eq("output_type", "resume_markdown")
+          .is("delivery_variant_key", null)
+          .eq("is_current", true)
+      }
+
       outputsToInsert.push({
         case_id: caseId,
         output_type: "resume_markdown",
@@ -169,11 +200,23 @@ export async function applyRiskFixes(caseId: string) {
         version: newVersion,
         template_id: latestResume.template_id ?? null,
         prompt_version: "risk_fix_applied",
+        delivery_mode: (latestResume as Record<string, unknown>).delivery_mode as string | null,
+        target_role: (latestResume as Record<string, unknown>).target_role as string | null,
+        delivery_variant_key: resumeVariantKey,
+        is_current: true,
       })
     }
 
     if (profilePatched && profileMarkdown && latestProfile) {
       const newVersion = latestProfile.version + 1
+
+      await serviceClient
+        .from("generated_outputs")
+        .update({ is_current: false })
+        .eq("case_id", caseId)
+        .eq("output_type", "profile_page")
+        .eq("is_current", true)
+
       outputsToInsert.push({
         case_id: caseId,
         output_type: "profile_page",
@@ -183,6 +226,10 @@ export async function applyRiskFixes(caseId: string) {
         version: newVersion,
         template_id: latestProfile.template_id ?? null,
         prompt_version: "risk_fix_applied",
+        delivery_mode: (latestProfile as Record<string, unknown>).delivery_mode as string | null,
+        target_role: (latestProfile as Record<string, unknown>).target_role as string | null,
+        delivery_variant_key: (latestProfile as Record<string, unknown>).delivery_variant_key as string | null,
+        is_current: true,
       })
     }
 

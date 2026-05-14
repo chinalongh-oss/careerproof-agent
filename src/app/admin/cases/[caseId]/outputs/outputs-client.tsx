@@ -303,7 +303,11 @@ export function OutputsClient({ caseId, candidateName, targetRole, caseStatus, r
         setExporting(false)
         return
       }
-      const res = await fetch(`/api/cases/${caseId}/export-pdf?outputId=${outputId}`)
+      const res = await fetch(`/api/cases/${caseId}/export-pdf`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ outputId }),
+      })
       const data = await res.json()
       if (!res.ok || !data.ok) {
         setExportError(data.error || "导出失败")
@@ -1118,7 +1122,11 @@ export function OutputsClient({ caseId, candidateName, targetRole, caseStatus, r
                     </Link>
                     <Button variant="outline" size="sm" onClick={async () => {
                       try {
-                        const res = await fetch(`/api/cases/${caseId}/export-pdf?outputId=${r.id}`)
+                        const res = await fetch(`/api/cases/${caseId}/export-pdf`, {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ outputId: r.id }),
+                        })
                         const data = await res.json()
                         if (data.ok && data.signedUrl) {
                           window.open(data.signedUrl, "_blank")
@@ -1274,7 +1282,9 @@ export function OutputsClient({ caseId, candidateName, targetRole, caseStatus, r
                       size="sm"
                       onClick={async () => {
                         try {
-                          const res = await fetch(`/api/cases/${caseId}/export-interview-pdf`)
+                          const res = await fetch(`/api/cases/${caseId}/export-interview-pdf`, {
+                            method: "POST",
+                          })
                           const data = await res.json()
                           if (data.ok && data.signedUrl) {
                             window.open(data.signedUrl, "_blank")

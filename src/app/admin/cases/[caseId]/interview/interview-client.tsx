@@ -162,7 +162,9 @@ export function InterviewClient({ caseId, candidateName, targetRole, interviewPa
             size="sm"
             onClick={async () => {
               try {
-                const res = await fetch(`/api/cases/${caseId}/export-interview-pdf`)
+                const res = await fetch(`/api/cases/${caseId}/export-interview-pdf`, {
+                  method: "POST",
+                })
                 const data = await res.json()
                 if (data.ok && data.signedUrl) {
                   window.open(data.signedUrl, "_blank")

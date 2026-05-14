@@ -244,7 +244,11 @@ export function WorkflowPanel({ caseId, currentStatus }: { caseId: string; curre
   async function handleExportPdf() {
     setExportPdfPending(true)
     try {
-      const res = await fetch(`/api/cases/${caseId}/export-pdf`)
+      const res = await fetch(`/api/cases/${caseId}/export-pdf`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      })
       const data = await res.json()
       if (!res.ok || !data.ok) {
         toast.error(data.error || "导出 PDF 失败")

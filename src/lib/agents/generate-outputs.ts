@@ -332,6 +332,13 @@ export async function generateOutputs(caseId: string, forceRegenerate = false, f
     prompt_version: PROMPT_VERSION,
   }
 
+  await serviceClient
+    .from("generated_outputs")
+    .update({ is_current: false })
+    .eq("case_id", caseId)
+    .eq("output_type", "profile_page")
+    .eq("is_current", true)
+
   // --- 2. Build ResumeTargets from selected_delivery_targets ---
   const resumeTargets: ResumeTarget[] = []
 

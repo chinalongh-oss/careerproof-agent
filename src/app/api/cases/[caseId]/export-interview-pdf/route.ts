@@ -1,16 +1,25 @@
 import { NextRequest, NextResponse } from "next/server"
 import { serviceClient } from "@/lib/supabase/service"
 import { exportHtmlToPdf } from "@/lib/export-pdf"
+import { verifyAdminCookie } from "@/lib/auth"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 export const maxDuration = 60
 
-export async function GET(
+export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ caseId: string }> }
 ) {
   const { caseId } = await params
+
+  const adminCookieValue = req.cookies.get("admin_token")?.value
+  if (!adminCookieValue || !verifyAdminCookie(adminCookieValue)) {
+    return NextResponse.json(
+      { ok: false, error: "Unauthorized" },
+      { status: 401 }
+    )
+  }
 
   const { data: outputsData } = await serviceClient
     .from("generated_outputs")
