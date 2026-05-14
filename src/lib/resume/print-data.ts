@@ -8,7 +8,7 @@ export type ResumePrintData = {
   createdAt: string
 } | null
 
-export async function getResumePrintData(caseId: string): Promise<ResumePrintData> {
+export async function getResumePrintData(caseId: string, outputId?: string): Promise<ResumePrintData> {
   const { data: caseData } = await serviceClient
     .from("cases")
     .select("candidate_name,email,wechat,current_title,target_role,target_direction")
@@ -17,16 +17,32 @@ export async function getResumePrintData(caseId: string): Promise<ResumePrintDat
 
   if (!caseData) return null
 
-  const { data: outputsData } = await serviceClient
-    .from("generated_outputs")
-    .select("id,markdown,version,created_at")
-    .eq("case_id", caseId)
-    .eq("output_type", "resume_markdown")
-    .order("version", { ascending: false })
-    .limit(1)
+  let resume: { id: string; markdown: string | null; version: number; created_at: string } | null = null
 
-  const outputsArr = Array.isArray(outputsData) ? outputsData : outputsData ? [outputsData] : []
-  const resume = outputsArr[0] ?? null
+  if (outputId) {
+    const { data: singleOutput } = await serviceClient
+      .from("generated_outputs")
+      .select("id,markdown,version,created_at")
+      .eq("id", outputId)
+      .eq("case_id", caseId)
+      .eq("output_type", "resume_markdown")
+      .single()
+
+    resume = singleOutput as typeof resume | null
+  }
+
+  if (!resume) {
+    const { data: outputsData } = await serviceClient
+      .from("generated_outputs")
+      .select("id,markdown,version,created_at")
+      .eq("case_id", caseId)
+      .eq("output_type", "resume_markdown")
+      .order("version", { ascending: false })
+      .limit(1)
+
+    const outputsArr = Array.isArray(outputsData) ? outputsData : outputsData ? [outputsData] : []
+    resume = outputsArr[0] ?? null
+  }
 
   if (!resume || !resume.markdown) return null
 

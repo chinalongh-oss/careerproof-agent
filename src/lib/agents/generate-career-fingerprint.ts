@@ -19,7 +19,7 @@ export async function generateCareerFingerprint(caseId: string) {
 
   const { data: cards, error: cardsError } = await serviceClient
     .from("project_cards")
-    .select("id,project_name")
+    .select("id,project_name,business_context,business_problem,candidate_role,personal_actions,team_actions,metrics,result_summary,evidence_level,public_visibility,risk_flags,recommended_expression,not_recommended_expression,interview_risks,role_angle_tags,reader_lens_tags")
     .eq("case_id", caseId)
     .order("created_at", { ascending: true })
 

@@ -2,6 +2,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import Link from "next/link"
 import { serviceClient } from "@/lib/supabase/service"
+import { formatLocalDate } from "@/lib/utils"
 import type { CaseStatus } from "@/lib/supabase/types"
 
 const statusMap = {
@@ -97,7 +98,7 @@ export default async function AdminCasesPage() {
                   <Badge variant={st.variant}>{st.label}</Badge>
                 </div>
                 <div className="text-sm text-muted-foreground">
-                  {new Date(c.created_at).toLocaleDateString("zh-CN")}
+                  {formatLocalDate(c.created_at)}
                 </div>
                 <div className="text-right">
                   <Link href={`/admin/cases/${c.id}`}>

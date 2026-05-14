@@ -18,7 +18,15 @@ export async function generateOutputs(caseId: string, forceRegenerate = false, f
   const latestResume = outputsArr.find((o) => o.output_type === "resume_markdown")
   const latestProfile = outputsArr.find((o) => o.output_type === "profile_page")
 
-  if (!forceRegenerate && latestResume && latestProfile) {
+  const { data: deliveryTarget } = await serviceClient
+    .from("selected_delivery_targets")
+    .select("*")
+    .eq("case_id", caseId)
+
+  const targetsArr = Array.isArray(deliveryTarget) ? deliveryTarget as Record<string, unknown>[] : deliveryTarget ? [deliveryTarget as Record<string, unknown>] : []
+  const hasDeliveryTargets = targetsArr.length > 0
+
+  if (!forceRegenerate && latestResume && latestProfile && !hasDeliveryTargets) {
     const { data: caseData } = await serviceClient
       .from("cases")
       .select("status")
@@ -174,15 +182,16 @@ export async function generateOutputs(caseId: string, forceRegenerate = false, f
     .single()
 
   const fitAssessment = fitData as Record<string, unknown> | null
-  let deliveryMode = (fitAssessment?.recommended_delivery_mode as string) ?? "full_resume"
-  const fitLevel = (fitAssessment?.fit_level as string) ?? "high"
+  if (!fitAssessment) {
+    return { success: false, error: "请先完成岗位适配判断" }
+  }
+  let deliveryMode = (fitAssessment.recommended_delivery_mode as string) ?? ""
+  const fitLevel = (fitAssessment.fit_level as string) ?? ""
 
-  const { data: deliveryTarget } = await serviceClient
-    .from("selected_delivery_targets")
-    .select("*")
-    .eq("case_id", caseId)
+  if (!deliveryMode || !fitLevel) {
+    return { success: false, error: "岗位适配判断数据不完整，请重新执行岗位适配判断" }
+  }
 
-  const targetsArr = Array.isArray(deliveryTarget) ? deliveryTarget as Record<string, unknown>[] : deliveryTarget ? [deliveryTarget as Record<string, unknown>] : []
   const target = targetsArr.length > 0 ? targetsArr[0] : null
   const userChoseForcedTarget = target?.delivery_mode === "forced_target_resume" && target?.risk_acknowledged === true
   const userChoseAltRole = target?.delivery_mode === "full_resume" && typeof target?.target_role === "string" && (target?.target_role as string).length > 0
@@ -393,6 +402,8 @@ export async function generateOutputs(caseId: string, forceRegenerate = false, f
   }
 
   // --- 4. Generate diagnostic_report if selected ---
+  let diagnosticReport: { title: string; markdown: string } | null = null
+
   if (hasDiagnosticTarget) {
     const diagnosticPrompt = `请基于以下信息生成一份诊断报告：
 
@@ -424,11 +435,10 @@ ${cardsStr}
     })
 
     if (!("error" in diagRes)) {
-      generatedResumes.push({
-        title: "【诊断报告】岗位适配分析",
+      diagnosticReport = {
+        title: "诊断报告",
         markdown: diagRes.data.markdown,
-        content: null,
-      })
+      }
     }
   }
 
@@ -460,6 +470,25 @@ ${cardsStr}
       markdown: generatedResumes[i].markdown,
       content: generatedResumes[i].content,
       version: resumeVersion + i,
+      template_id: null,
+      prompt_version: PROMPT_VERSION,
+    })
+  }
+
+  if (diagnosticReport) {
+    let diagVersion = 1
+    for (const row of outputsArr) {
+      if (row.output_type === "diagnostic_report" && row.version >= diagVersion) {
+        diagVersion = row.version + 1
+      }
+    }
+    outputsToInsert.push({
+      case_id: caseId,
+      output_type: "diagnostic_report",
+      title: `【诊断报告】岗位适配分析`,
+      markdown: diagnosticReport.markdown,
+      content: null,
+      version: diagVersion,
       template_id: null,
       prompt_version: PROMPT_VERSION,
     })

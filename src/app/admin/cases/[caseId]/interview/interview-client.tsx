@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge"
 import Link from "next/link"
 import { Loader2, MessageSquare, AlertTriangle, CheckCircle2, ListChecks, FileText, ArrowLeft, Download } from "lucide-react"
 import { generateInterviewPackAction } from "../actions"
+import { formatLocalTime } from "@/lib/utils"
 
 type OutputRow = {
   id: string
@@ -188,7 +189,7 @@ export function InterviewClient({ caseId, candidateName, targetRole, interviewPa
 
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
         <Badge variant="secondary" className="text-xs">v{interviewPack.version}</Badge>
-        <span>生成时间：{new Date(interviewPack.created_at).toLocaleString("zh-CN")}</span>
+        <span>生成时间：{formatLocalTime(interviewPack.created_at)}</span>
       </div>
 
       {packContent.overall_interview_strategy && (

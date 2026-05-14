@@ -4,6 +4,7 @@ import { Separator } from "@/components/ui/separator"
 import Link from "next/link"
 import { notFound } from "next/navigation"
 import { serviceClient } from "@/lib/supabase/service"
+import { formatLocalTime } from "@/lib/utils"
 import type { CaseStatus } from "@/lib/supabase/types"
 import { WorkflowPanel } from "./workflow-panel"
 import { CaseStatusBar } from "./case-status-bar"
@@ -109,7 +110,7 @@ export default async function CaseDetailPage({
             <CardTitle className="text-xs font-medium text-muted-foreground">创建时间</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-xs text-muted-foreground">{new Date(c.created_at).toLocaleString("zh-CN")}</p>
+            <p className="text-xs text-muted-foreground">{formatLocalTime(c.created_at)}</p>
           </CardContent>
         </Card>
         <Card>
@@ -117,7 +118,7 @@ export default async function CaseDetailPage({
             <CardTitle className="text-xs font-medium text-muted-foreground">更新时间</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-xs text-muted-foreground">{new Date(c.updated_at).toLocaleString("zh-CN")}</p>
+            <p className="text-xs text-muted-foreground">{formatLocalTime(c.updated_at)}</p>
           </CardContent>
         </Card>
       </div>

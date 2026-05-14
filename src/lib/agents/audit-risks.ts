@@ -6,6 +6,63 @@ import { RiskReviewOutputSchema } from "@/lib/schemas"
 import { AUDIT_RISKS_USER_PROMPT } from "@/lib/prompts/agents/audit-risks"
 import { serviceClient, normalizeError } from "@/lib/supabase/service"
 
+const MAX_CHUNK_CHARS = 8000
+
+function splitMarkdownIntoSections(markdown: string): { heading: string; content: string }[] {
+  const sections: { heading: string; content: string }[] = []
+  const lines = markdown.split("\n")
+  let currentHeading = "(文档开头)"
+  let currentContent: string[] = []
+
+  for (const line of lines) {
+    if (/^#{1,3}\s/.test(line)) {
+      if (currentContent.length > 0 || currentHeading !== "(文档开头)") {
+        sections.push({ heading: currentHeading, content: currentContent.join("\n").trim() })
+      }
+      currentHeading = line.trim()
+      currentContent = []
+    } else {
+      currentContent.push(line)
+    }
+  }
+  if (currentContent.length > 0 || sections.length === 0) {
+    sections.push({ heading: currentHeading, content: currentContent.join("\n").trim() })
+  }
+  return sections
+}
+
+function chunkSections(
+  sections: { heading: string; content: string }[],
+  sourceLabel: string,
+  maxChunkChars: number
+): string[] {
+  const chunks: string[] = []
+  let currentChunk = ""
+
+  for (const section of sections) {
+    const sectionBlock = `### [${sourceLabel}] ${section.heading}\n${section.content}\n`
+    if (currentChunk.length + sectionBlock.length > maxChunkChars && currentChunk.length > 0) {
+      chunks.push(currentChunk.trim())
+      currentChunk = sectionBlock
+    } else {
+      currentChunk += sectionBlock
+    }
+  }
+  if (currentChunk.trim()) {
+    chunks.push(currentChunk.trim())
+  }
+  return chunks.length > 0 ? chunks : [""]
+}
+
+function formatContentAsSections(
+  markdown: string,
+  sourceLabel: string,
+  maxChunkChars: number = MAX_CHUNK_CHARS
+): string[] {
+  const sections = splitMarkdownIntoSections(markdown)
+  return chunkSections(sections, sourceLabel, maxChunkChars)
+}
+
 export async function auditRisks(caseId: string) {
   const { data: resumeOutputs } = await serviceClient
     .from("generated_outputs")
@@ -78,21 +135,12 @@ export async function auditRisks(caseId: string) {
     .eq("selected", true)
     .single()
 
-  let resumeStr: string
-  let profilePageStr: string
   let cardsStr: string
   let jdStr: string
   let candidateProfileStr: string
   let posStr: string
 
-  const MAX_RESUME_CHARS = 3000
-  const MAX_PROFILE_CHARS = 2500
-
   try {
-    resumeStr = (latestResume.markdown ?? "").slice(0, MAX_RESUME_CHARS)
-
-    profilePageStr = (latestProfile.markdown ?? "").slice(0, MAX_PROFILE_CHARS)
-
     const trimmedCards = cardsArr.map((c: Record<string, unknown>) => ({
       id: c.id,
       project_name: c.project_name,
@@ -155,41 +203,87 @@ export async function auditRisks(caseId: string) {
 
   const fitStr = fitData ? JSON.stringify(fitData, null, 2) : "未进行岗位适配判断"
 
-  const userPrompt = AUDIT_RISKS_USER_PROMPT
-    .replace("{{resume_markdown}}", resumeStr)
-    .replace("{{profile_page}}", profilePageStr)
-    .replace("{{project_cards}}", cardsStr)
-    .replace("{{job_description}}", jdStr)
-    .replace("{{candidate_profile}}", candidateProfileStr)
-    .replace("{{selected_positioning}}", posStr)
-    .replace("{{job_fit_assessment}}", fitStr)
+  const resumeMarkdown = latestResume.markdown ?? ""
+  const profileMarkdown = latestProfile.markdown ?? ""
 
-  const result = await generateStructuredOutput({
-    agent_name: "audit_risks",
-    case_id: caseId,
-    system_prompt: SYSTEM_PROMPT,
-    system_prompt_key: PROMPT_KEYS.RUN_RISK_REVIEW,
-    user_prompt: userPrompt,
-    schema_name: "risk_review",
-    schema: RiskReviewOutputSchema,
-    max_tokens: 4096,
-  })
+  const resumeChunks = formatContentAsSections(resumeMarkdown, "resume_markdown")
+  const profileChunks = formatContentAsSections(profileMarkdown, "profile_page")
 
-  if ("error" in result) {
-    return { success: false, error: `风险审查失败：${result.error}` }
+  const sharedPlaceholders: Record<string, string> = {
+    "{{project_cards}}": cardsStr,
+    "{{job_description}}": jdStr,
+    "{{candidate_profile}}": candidateProfileStr,
+    "{{selected_positioning}}": posStr,
+    "{{job_fit_assessment}}": fitStr,
   }
 
-  const riskData = result.data
+  const chunkPairs: { resumeChunk: string; profileChunk: string }[] = []
+  const maxLen = Math.max(resumeChunks.length, profileChunks.length)
+  for (let i = 0; i < maxLen; i++) {
+    chunkPairs.push({
+      resumeChunk: resumeChunks[i] ?? "",
+      profileChunk: profileChunks[i] ?? "",
+    })
+  }
 
-  // --- Delete old open risk_issues for this case ---
+  interface RiskIssue {
+    source_type: string
+    source_text: string
+    risk_type: string
+    risk_level: string
+    reason: string
+    suggestion: string
+    safer_rewrite?: string | null
+  }
+
+  const allIssues: RiskIssue[] = []
+
+  for (const pair of chunkPairs) {
+    const userPrompt = AUDIT_RISKS_USER_PROMPT
+      .replace("{{resume_markdown}}", pair.resumeChunk || "（本块无简历内容）")
+      .replace("{{profile_page}}", pair.profileChunk || "（本块无个人主页内容）")
+      .replace("{{project_cards}}", sharedPlaceholders["{{project_cards}}"])
+      .replace("{{job_description}}", sharedPlaceholders["{{job_description}}"])
+      .replace("{{candidate_profile}}", sharedPlaceholders["{{candidate_profile}}"])
+      .replace("{{selected_positioning}}", sharedPlaceholders["{{selected_positioning}}"])
+      .replace("{{job_fit_assessment}}", sharedPlaceholders["{{job_fit_assessment}}"])
+
+    const result = await generateStructuredOutput({
+      agent_name: "audit_risks",
+      case_id: caseId,
+      system_prompt: SYSTEM_PROMPT,
+      system_prompt_key: PROMPT_KEYS.RUN_RISK_REVIEW,
+      user_prompt: userPrompt,
+      schema_name: "risk_review",
+      schema: RiskReviewOutputSchema,
+      max_tokens: 4096,
+    })
+
+    if ("error" in result) {
+      return { success: false, error: `风险审查失败：${result.error}` }
+    }
+
+    const issues = (result.data.issues ?? []) as RiskIssue[]
+    for (const issue of issues) {
+      allIssues.push(issue)
+    }
+  }
+
+  const seen = new Set<string>()
+  const dedupedIssues = allIssues.filter((issue) => {
+    const key = `${issue.source_type}|${issue.source_text}|${issue.risk_type}`
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+
   await serviceClient
     .from("risk_issues")
     .delete()
     .eq("case_id", caseId)
     .eq("status", "open")
 
-  // --- Insert new risk_issues ---
-  const issuesToInsert = (riskData.issues ?? []).map((issue) => {
+  const issuesToInsert = dedupedIssues.map((issue) => {
     const sourceType = issue.source_type ?? "resume_markdown"
     let outputId: string | null = null
     if (sourceType === "resume_markdown") {

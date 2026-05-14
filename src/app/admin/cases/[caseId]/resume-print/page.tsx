@@ -5,12 +5,15 @@ export const dynamic = "force-dynamic"
 
 export default async function ResumePrintPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ caseId: string }>
+  searchParams: Promise<{ outputId?: string }>
 }) {
   const { caseId } = await params
+  const { outputId } = await searchParams
 
-  const data = await getResumePrintData(caseId)
+  const data = await getResumePrintData(caseId, outputId)
 
   if (!data) {
     return (

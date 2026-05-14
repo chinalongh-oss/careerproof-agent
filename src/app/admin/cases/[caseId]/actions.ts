@@ -94,15 +94,46 @@ export async function buildProjectCardsAction(caseId: string) {
   }
 }
 
+const PROJECT_CARD_EDITABLE_FIELDS = new Set([
+  "project_name",
+  "business_context",
+  "business_problem",
+  "candidate_role",
+  "personal_actions",
+  "team_actions",
+  "metrics",
+  "result_summary",
+  "evidence_level",
+  "public_visibility",
+  "risk_flags",
+  "recommended_expression",
+  "not_recommended_expression",
+  "interview_risks",
+  "role_angle_tags",
+  "reader_lens_tags",
+  "is_featured",
+])
+
 export async function updateProjectCard(
   cardId: string,
   caseId: string,
   data: Record<string, unknown>
 ) {
   try {
+    const filtered: Record<string, unknown> = {}
+    for (const key of Object.keys(data)) {
+      if (PROJECT_CARD_EDITABLE_FIELDS.has(key)) {
+        filtered[key] = data[key]
+      }
+    }
+
+    if (Object.keys(filtered).length === 0) {
+      return { success: false, error: "没有可更新的字段" }
+    }
+
     const { error } = await serviceClient
       .from("project_cards")
-      .update(data)
+      .update(filtered)
       .eq("id", cardId)
       .eq("case_id", caseId)
 
@@ -746,36 +777,24 @@ export async function markDeliveredAction(caseId: string) {
       return { success: false, error: "案例不存在" }
     }
 
-    const status = (caseData as Record<string, unknown>).status as string
+    const { data: risks } = await serviceClient
+      .from("risk_issues")
+      .select("risk_level,status")
+      .eq("case_id", caseId)
+      .eq("status", "open")
+      .in("risk_level", ["high", "medium"])
 
-    const statusOrder = [
-      "new_submitted", "parsed", "evidence_ready", "jd_ready", "fingerprint_ready",
-      "positioning_ready", "outputs_ready", "risk_reviewed", "interview_ready", "delivered",
-    ]
+    const risksArr = Array.isArray(risks) ? risks : risks ? [risks] : []
+    const hasHighRisk = risksArr.some(
+      (r: Record<string, unknown>) => r.risk_level === "high"
+    )
 
-    const riskReviewedIdx = statusOrder.indexOf("risk_reviewed")
-    const currentIdx = statusOrder.indexOf(status)
+    if (hasHighRisk) {
+      return { success: false, error: "存在高风险待处理，请先完成风险审查" }
+    }
 
-    if (currentIdx < riskReviewedIdx) {
-      const { data: risks } = await serviceClient
-        .from("risk_issues")
-        .select("risk_level,status")
-        .eq("case_id", caseId)
-        .eq("status", "open")
-        .in("risk_level", ["high", "medium"])
-
-      const risksArr = Array.isArray(risks) ? risks : risks ? [risks] : []
-      const hasHighRisk = risksArr.some(
-        (r: Record<string, unknown>) => r.risk_level === "high"
-      )
-
-      if (hasHighRisk) {
-        return { success: false, error: "存在高风险待处理，请先完成风险审查" }
-      }
-
-      if (risksArr.length > 0) {
-        return { success: false, error: "存在中等风险待处理，请先完成风险审查" }
-      }
+    if (risksArr.length > 0) {
+      return { success: false, error: "存在中等风险待处理，请先完成风险审查" }
     }
 
     const { data: publicPages } = await serviceClient

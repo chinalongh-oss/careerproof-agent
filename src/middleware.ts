@@ -36,6 +36,11 @@ async function verifyAdminHmac(cookieValue: string): Promise<boolean> {
     const [issuedAt, signature] = cookieValue.split(".")
     if (!issuedAt || !signature) return false
 
+    const issuedMs = parseInt(issuedAt, 10)
+    if (isNaN(issuedMs)) return false
+    const ADMIN_COOKIE_TTL_MS = 24 * 60 * 60 * 1000
+    if (Date.now() - issuedMs > ADMIN_COOKIE_TTL_MS) return false
+
     const encoder = new TextEncoder()
     const keyData = encoder.encode(secret)
     const messageData = encoder.encode(`admin:${issuedAt}`)

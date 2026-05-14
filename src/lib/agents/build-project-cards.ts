@@ -110,5 +110,14 @@ export async function buildProjectCards(caseId: string) {
   const rpcData = rpcResult as { ok: boolean; inserted: number } | null
   const insertedCount = rpcData?.inserted ?? projects.length
 
+  const { error: statusError } = await serviceClient
+    .from("cases")
+    .update({ status: "evidence_ready", updated_at: new Date().toISOString() })
+    .eq("id", caseId)
+
+  if (statusError) {
+    return { success: false, error: `证据卡已保存，但更新案例状态失败：${normalizeError(statusError)}` }
+  }
+
   return { success: true, message: `已生成 ${insertedCount} 张项目证据卡` }
 }

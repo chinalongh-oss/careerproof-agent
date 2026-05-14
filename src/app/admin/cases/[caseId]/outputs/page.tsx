@@ -27,8 +27,9 @@ export default async function OutputsPage({
 
   const allOutputs = Array.isArray(outputsData) ? outputsData : outputsData ? [outputsData] : []
 
-  const resumeOutput = allOutputs.find((o) => o.output_type === "resume_markdown") ?? null
+  const resumeOutputs = allOutputs.filter((o) => o.output_type === "resume_markdown")
   const profileOutput = allOutputs.find((o) => o.output_type === "profile_page") ?? null
+  const diagnosticOutput = allOutputs.find((o) => o.output_type === "diagnostic_report") ?? null
   const interviewPack = allOutputs.find((o) => o.output_type === "interview_pack") ?? null
 
   const { data: publicPage } = await serviceClient
@@ -82,7 +83,8 @@ export default async function OutputsPage({
         candidateName={caseData.candidate_name}
         targetRole={targetRole}
         caseStatus={(caseData as Record<string, unknown>).status as string}
-        resumeOutput={resumeOutput}
+        resumeOutputs={resumeOutputs}
+        diagnosticOutput={diagnosticOutput}
         profileOutput={profileOutput}
         publicPage={currentPublicPage}
         recentArtifact={recentArtifact}

@@ -14,6 +14,7 @@ import { Label } from "@/components/ui/label"
 import Link from "next/link"
 import { Layout, RefreshCw, Save, Loader2, FileText, Globe, ShieldAlert, ExternalLink, Palette, Send, Download, Printer, Package, CheckCircle2, MessageSquare, Lock, AlertTriangle, Target } from "lucide-react"
 import { generateOutputsAction, saveOutputAction, auditRisksAction, upsertPublicPageAction, savePublicPageThemeAction, markDeliveredAction, setPagePasswordAction, clearPagePasswordAction, setDeliveryTargetAction } from "../actions"
+import { formatLocalTime } from "@/lib/utils"
 import type { JobFitAssessment, SelectedDeliveryTarget } from "@/lib/supabase/types"
 
 type OutputRow = {
@@ -69,7 +70,8 @@ interface Props {
   candidateName: string | null
   targetRole: string | null
   caseStatus: string
-  resumeOutput: OutputRow | null
+  resumeOutputs: OutputRow[]
+  diagnosticOutput: OutputRow | null
   profileOutput: OutputRow | null
   publicPage: PublicPageRow
   recentArtifact: ArtifactRow
@@ -85,13 +87,16 @@ const THEME_OPTIONS = [
   { value: "headhunter_quickview", label: "Headhunter Quick View - 猎头速览" },
 ]
 
-export function OutputsClient({ caseId, candidateName, targetRole, caseStatus, resumeOutput, profileOutput, publicPage, recentArtifact, interviewPack, jdData, jobFitAssessment, deliveryTargets }: Props) {
+export function OutputsClient({ caseId, candidateName, targetRole, caseStatus, resumeOutputs, diagnosticOutput, profileOutput, publicPage, recentArtifact, interviewPack, jdData, jobFitAssessment, deliveryTargets }: Props) {
   const searchParams = useSearchParams()
   const [activeTab, setActiveTab] = useState(searchParams.get("tab") ?? "resume")
 
+  const [selectedResumeId, setSelectedResumeId] = useState(resumeOutputs[0]?.id ?? "")
+  const selectedResume = resumeOutputs.find((r) => r.id === selectedResumeId) ?? resumeOutputs[0] ?? null
+
   const [generating, setGenerating] = useState(false)
-  const [resumeMarkdown, setResumeMarkdown] = useState(resumeOutput?.markdown ?? "")
-  const [resumeTitle, setResumeTitle] = useState(resumeOutput?.title ?? "")
+  const [resumeMarkdown, setResumeMarkdown] = useState(selectedResume?.markdown ?? "")
+  const [resumeTitle, setResumeTitle] = useState(selectedResume?.title ?? "")
   const [profileMarkdown, setProfileMarkdown] = useState(profileOutput?.markdown ?? "")
   const [resumeSaving, setResumeSaving] = useState(false)
   const [profileSaving, setProfileSaving] = useState(false)
@@ -115,7 +120,7 @@ export function OutputsClient({ caseId, candidateName, targetRole, caseStatus, r
     () => deliveryTargets.map(t => ({ mode: t.delivery_mode, role: t.target_role ?? null }))
   )
 
-  const hasAny = !!(resumeOutput || profileOutput)
+  const hasAny = !!(selectedResume || profileOutput)
   const currentSlug = publicPage?.slug
   const isPublished = publicPage?.is_published ?? false
   const fitLevel = jobFitAssessment?.fit_level ?? "high"
@@ -136,10 +141,10 @@ export function OutputsClient({ caseId, candidateName, targetRole, caseStatus, r
     window.location.href = url.toString()
   }, [activeTab])
 
-  async function handleGenerate() {
+  async function handleGenerate(forceGenerate = false) {
     setGenerating(true)
     try {
-      const result = await generateOutputsAction(caseId)
+      const result = await generateOutputsAction(caseId, forceGenerate)
       if (result.success) {
         toast.success(result.message || "生成完成")
         reloadPreservingTab()
@@ -267,7 +272,14 @@ export function OutputsClient({ caseId, candidateName, targetRole, caseStatus, r
     setPdfSignedUrl(null)
     setExportError(null)
     try {
-      const res = await fetch(`/api/cases/${caseId}/export-pdf`)
+      const outputId = selectedResume?.id
+      if (!outputId) {
+        setExportError("请先选择一个简历版本")
+        toast.error("请先选择一个简历版本")
+        setExporting(false)
+        return
+      }
+      const res = await fetch(`/api/cases/${caseId}/export-pdf?outputId=${outputId}`)
       const data = await res.json()
       if (!res.ok || !data.ok) {
         setExportError(data.error || "导出失败")
@@ -518,7 +530,7 @@ export function OutputsClient({ caseId, candidateName, targetRole, caseStatus, r
                   {hasForcedTarget && <span className="mr-2">· 目标 JD 尝试版</span>}
                   {hasDiagnostic && <span>· 诊断报告</span>}
                 </p>
-                <Button onClick={handleGenerate} disabled={generating}>
+                <Button onClick={() => handleGenerate()} disabled={generating}>
                   {generating ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Layout className="h-4 w-4 mr-1.5" />}
                   {generating ? "生成中..." : "打包生成交付物"}
                 </Button>
@@ -536,18 +548,18 @@ export function OutputsClient({ caseId, candidateName, targetRole, caseStatus, r
                 </p>
                 <div className="flex items-center justify-center gap-2">
                   {isForcedTargetMode ? (
-                    <Button onClick={handleGenerate} disabled={generating}>
+                    <Button onClick={() => handleGenerate()} disabled={generating}>
                       {generating ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Layout className="h-4 w-4 mr-1.5" />}
                       {generating ? "生成中..." : "生成目标 JD 尝试版"}
                     </Button>
                   ) : !needsForceGenerate ? (
-                    <Button onClick={handleGenerate} disabled={generating}>
+                    <Button onClick={() => handleGenerate()} disabled={generating}>
                       {generating ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Layout className="h-4 w-4 mr-1.5" />}
                       {generating ? "生成中..." : "生成简历和主页"}
                     </Button>
                   ) : (
                     <>
-                      <Button onClick={handleGenerate} disabled={generating} variant="outline">
+                      <Button onClick={() => handleGenerate()} disabled={generating} variant="outline">
                         {generating ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Layout className="h-4 w-4 mr-1.5" />}
                         {generating ? "生成中..." : "尝试生成"}
                       </Button>
@@ -590,7 +602,7 @@ export function OutputsClient({ caseId, candidateName, targetRole, caseStatus, r
           <Button
             variant="outline"
             size="sm"
-            onClick={handleGenerate}
+            onClick={() => handleGenerate(true)}
             disabled={generating}
           >
             {generating ? (
@@ -659,8 +671,11 @@ export function OutputsClient({ caseId, candidateName, targetRole, caseStatus, r
           <TabsTrigger value="resume">
             <FileText className="h-4 w-4 mr-1.5" />
             简历
-            {resumeOutput && (
-              <Badge variant="secondary" className="ml-2 text-xs">v{resumeOutput.version}</Badge>
+            {selectedResume && (
+              <Badge variant="secondary" className="ml-2 text-xs">v{selectedResume.version}</Badge>
+            )}
+            {resumeOutputs.length > 1 && (
+              <Badge variant="outline" className="ml-1 text-xs">{resumeOutputs.length}个版本</Badge>
             )}
           </TabsTrigger>
           <TabsTrigger value="profile">
@@ -677,7 +692,24 @@ export function OutputsClient({ caseId, candidateName, targetRole, caseStatus, r
         </TabsList>
 
         <TabsContent value="resume" className="space-y-4 mt-4">
-          {resumeOutput ? (
+          {resumeOutputs.length > 1 && (
+            <div className="flex items-center gap-2">
+              <Label className="text-xs shrink-0">简历版本：</Label>
+              <Select value={selectedResumeId} onValueChange={(v) => setSelectedResumeId(v)}>
+                <SelectTrigger className="w-[300px] h-8 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {resumeOutputs.map((r) => (
+                    <SelectItem key={r.id} value={r.id} className="text-xs">
+                      {r.title || `v${r.version}`} · v{r.version}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+          {selectedResume ? (
             <>
               <div className="flex items-center gap-3">
                 <div className="flex-1">
@@ -695,7 +727,7 @@ export function OutputsClient({ caseId, candidateName, targetRole, caseStatus, r
               </div>
 
               <div className="flex items-center gap-2">
-                <Link href={`/print/cases/${caseId}/resume`} target="_blank">
+                <Link href={`/print/cases/${caseId}/resume?outputId=${selectedResumeId}`} target="_blank">
                   <Button variant="outline" size="sm">
                     <Printer className="h-4 w-4 mr-1.5" />
                     预览打印页
@@ -749,7 +781,7 @@ export function OutputsClient({ caseId, candidateName, targetRole, caseStatus, r
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="text-xs text-muted-foreground space-y-1">
-                    <p>导出时间：{new Date(recentArtifact.created_at).toLocaleString("zh-CN")}</p>
+                    <p>导出时间：{formatLocalTime(recentArtifact.created_at)}</p>
                     {recentArtifact.sha256 && (
                       <p className="font-mono">SHA256：{recentArtifact.sha256.slice(0, 8)}...</p>
                     )}
@@ -784,6 +816,24 @@ export function OutputsClient({ caseId, candidateName, targetRole, caseStatus, r
                   </pre>
                 </CardContent>
               </Card>
+
+              {diagnosticOutput && (
+                <Card className="border-dashed border-blue-300">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <AlertTriangle className="h-4 w-4 text-blue-500" />
+                      诊断报告
+                      <Badge variant="outline" className="text-xs">v{diagnosticOutput.version}</Badge>
+                    </CardTitle>
+                    <CardDescription>岗位适配诊断分析，不用于正式投递</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <pre className="text-sm whitespace-pre-wrap font-sans bg-blue-50 dark:bg-blue-950/20 p-4 rounded leading-relaxed max-h-[600px] overflow-y-auto">
+                      {diagnosticOutput.markdown || "—"}
+                    </pre>
+                  </CardContent>
+                </Card>
+              )}
             </>
           ) : (
             <Card>
@@ -1010,38 +1060,90 @@ export function OutputsClient({ caseId, candidateName, targetRole, caseStatus, r
               <CardDescription>将所有交付物打包，准备发送给候选人</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              {/* PDF 简历下载 */}
-              <div className="flex items-center justify-between border rounded-lg p-4">
-                <div className="flex items-center gap-3">
-                  <div className="bg-red-50 p-2 rounded">
-                    <FileText className="h-5 w-5 text-red-500" />
+              {/* PDF 简历 - 每个版本一张卡 */}
+              {resumeOutputs.map((r) => (
+                <div key={r.id} className="flex items-center justify-between border rounded-lg p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="bg-red-50 p-2 rounded">
+                      <FileText className="h-5 w-5 text-red-500" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium">
+                        PDF 简历 {r.title && <span className="text-muted-foreground font-normal">· {r.title}</span>}
+                        <Badge variant="secondary" className="ml-2 text-xs">v{r.version}</Badge>
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {formatLocalTime(r.created_at)}
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-sm font-medium">PDF 简历</p>
-                    <p className="text-xs text-muted-foreground">
-                      {recentArtifact
-                        ? `最近导出：${new Date(recentArtifact.created_at).toLocaleString("zh-CN")}`
-                        : "尚未导出"}
-                    </p>
-                  </div>
-                </div>
-                {resumeOutput ? (
                   <div className="flex items-center gap-2">
-                    <Link href={`/admin/cases/${caseId}/resume-print`} target="_blank">
+                    <Link href={`/admin/cases/${caseId}/resume-print?outputId=${r.id}`} target="_blank">
                       <Button variant="outline" size="sm">
                         <Printer className="h-3.5 w-3.5 mr-1" />
                         预览
                       </Button>
                     </Link>
-                    <Button variant="outline" size="sm" onClick={handleExportPdf} disabled={exporting}>
-                      {exporting ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Download className="h-3.5 w-3.5 mr-1" />}
-                      {exporting ? "导出中..." : "导出 PDF"}
+                    <Button variant="outline" size="sm" onClick={async () => {
+                      try {
+                        const res = await fetch(`/api/cases/${caseId}/export-pdf?outputId=${r.id}`)
+                        const data = await res.json()
+                        if (data.ok && data.signedUrl) {
+                          window.open(data.signedUrl, "_blank")
+                        } else {
+                          toast.error(data.error || "导出失败")
+                        }
+                      } catch {
+                        toast.error("导出请求失败")
+                      }
+                    }}>
+                      <Download className="h-3.5 w-3.5 mr-1" />
+                      导出 PDF
                     </Button>
                   </div>
-                ) : (
+                </div>
+              ))}
+
+              {resumeOutputs.length === 0 && (
+                <div className="flex items-center justify-between border rounded-lg p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="bg-red-50 p-2 rounded">
+                      <FileText className="h-5 w-5 text-red-500" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium">PDF 简历</p>
+                      <p className="text-xs text-muted-foreground">尚未生成</p>
+                    </div>
+                  </div>
                   <Badge variant="secondary" className="text-xs">请先生成简历</Badge>
-                )}
-              </div>
+                </div>
+              )}
+
+              {/* 诊断报告 */}
+              {diagnosticOutput && (
+                <div className="flex items-center justify-between border rounded-lg p-4 border-dashed border-blue-300 bg-blue-50/30 dark:bg-blue-950/10">
+                  <div className="flex items-center gap-3">
+                    <div className="bg-blue-50 p-2 rounded">
+                      <AlertTriangle className="h-5 w-5 text-blue-500" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium">
+                        诊断报告
+                        <Badge variant="outline" className="ml-2 text-xs">v{diagnosticOutput.version}</Badge>
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {formatLocalTime(diagnosticOutput.created_at)} · 岗位适配分析，不用于正式投递
+                      </p>
+                    </div>
+                  </div>
+                  <Link href={`/admin/cases/${caseId}/resume-print?outputId=${diagnosticOutput.id}`} target="_blank">
+                    <Button variant="outline" size="sm">
+                      <Printer className="h-3.5 w-3.5 mr-1" />
+                      预览
+                    </Button>
+                  </Link>
+                </div>
+              )}
 
               {pdfSignedUrl && (
                 <Card className="border-green-200 bg-green-50">
@@ -1061,7 +1163,7 @@ export function OutputsClient({ caseId, candidateName, targetRole, caseStatus, r
 
               {recentArtifact && (
                 <div className="text-xs text-muted-foreground space-y-0.5 bg-muted/30 rounded p-3">
-                  <p>导出时间：{new Date(recentArtifact.created_at).toLocaleString("zh-CN")}</p>
+                  <p>导出时间：{formatLocalTime(recentArtifact.created_at)}</p>
                   {recentArtifact.sha256 && (
                     <p className="font-mono">SHA256：{recentArtifact.sha256.slice(0, 8)}...</p>
                   )}
@@ -1128,7 +1230,7 @@ export function OutputsClient({ caseId, candidateName, targetRole, caseStatus, r
                     <p className="text-sm font-medium">面试准备包</p>
                     <p className="text-xs text-muted-foreground">
                       {interviewPack
-                        ? `v${interviewPack.version} · ${new Date(interviewPack.created_at).toLocaleString("zh-CN")}`
+                        ? `v${interviewPack.version} · ${formatLocalTime(interviewPack.created_at)}`
                         : "尚未生成"}
                     </p>
                   </div>
