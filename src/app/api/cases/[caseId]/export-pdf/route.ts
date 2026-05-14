@@ -63,7 +63,7 @@ export async function GET(
   }
 
   const appUrl = req.nextUrl.origin
-  const printUrl = `${appUrl}/print/cases/${caseId}/resume`
+  const printUrl = `${appUrl}/print/cases/${caseId}/resume?outputId=${encodeURIComponent(outputId)}`
   const adminCookie = req.cookies.get("admin_token")
 
   const result = await exportHtmlToPdf({

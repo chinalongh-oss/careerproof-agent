@@ -263,9 +263,12 @@ export async function selectPositioningAction(caseId: string, positioningId: str
   }
 }
 
-export async function generateOutputsAction(caseId: string, forceGenerate = false) {
+export async function generateOutputsAction(
+  caseId: string,
+  options?: { forceRegenerate?: boolean; forceGenerate?: boolean }
+) {
   try {
-    const result = await generateOutputs(caseId, false, forceGenerate)
+    const result = await generateOutputs(caseId, options?.forceRegenerate ?? false, options?.forceGenerate ?? false)
     if (!result.success) {
       return { success: false, error: result.error }
     }
@@ -723,7 +726,7 @@ export async function upsertPublicPageAction(
   }
 }
 
-export async function markDeliveredAction(caseId: string) {
+export async function markDeliveredAction(caseId: string, resumeOutputId?: string) {
   try {
     const { data: resumeOutputs } = await serviceClient
       .from("generated_outputs")
@@ -740,9 +743,11 @@ export async function markDeliveredAction(caseId: string) {
       return { success: false, error: "请先生成简历内容（resume_markdown）" }
     }
 
+    const effectiveResumeId = resumeOutputId ?? latestResume.id
+
     const { data: artifacts } = await serviceClient
       .from("export_artifacts")
-      .select("id,sha256")
+      .select("id,sha256,source_output_id")
       .eq("case_id", caseId)
       .eq("artifact_type", "resume_pdf")
       .order("created_at", { ascending: false })
@@ -753,6 +758,11 @@ export async function markDeliveredAction(caseId: string) {
 
     if (!latestArtifact || !latestArtifact.sha256) {
       return { success: false, error: "请先导出 PDF 简历（需有有效 sha256）" }
+    }
+
+    const artifactSourceId = (latestArtifact as Record<string, unknown>).source_output_id as string | null
+    if (artifactSourceId !== effectiveResumeId) {
+      return { success: false, error: "PDF 版本与当前简历不一致，请重新导出 PDF 后再标记交付" }
     }
 
     const { data: interviewOutputs } = await serviceClient

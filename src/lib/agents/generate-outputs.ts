@@ -26,6 +26,20 @@ export async function generateOutputs(caseId: string, forceRegenerate = false, f
   const targetsArr = Array.isArray(deliveryTarget) ? deliveryTarget as Record<string, unknown>[] : deliveryTarget ? [deliveryTarget as Record<string, unknown>] : []
   const hasDeliveryTargets = targetsArr.length > 0
 
+  const { data: fitData } = await serviceClient
+    .from("job_fit_assessments")
+    .select("*")
+    .eq("case_id", caseId)
+    .single()
+
+  const fitAssessment = fitData as Record<string, unknown> | null
+
+  if (!fitAssessment && !forceRegenerate && !forceGenerate) {
+    if (latestResume || latestProfile) {
+      return { success: false, error: "请先完成岗位适配判断" }
+    }
+  }
+
   if (!forceRegenerate && latestResume && latestProfile && !hasDeliveryTargets) {
     const { data: caseData } = await serviceClient
       .from("cases")
@@ -72,7 +86,7 @@ export async function generateOutputs(caseId: string, forceRegenerate = false, f
 
   const { data: cards, error: cardsError } = await serviceClient
     .from("project_cards")
-    .select("id,project_name,business_context,business_problem,candidate_role,personal_actions,team_actions,metrics,result_summary,evidence_level")
+    .select("id,project_name,business_context,business_problem,candidate_role,personal_actions,team_actions,metrics,result_summary,evidence_level,public_visibility,risk_flags,recommended_expression,not_recommended_expression,interview_risks,role_angle_tags,reader_lens_tags")
     .eq("case_id", caseId)
     .order("created_at", { ascending: true })
 
@@ -131,6 +145,13 @@ export async function generateOutputs(caseId: string, forceRegenerate = false, f
       metrics: c.metrics,
       result_summary: c.result_summary,
       evidence_level: c.evidence_level,
+      public_visibility: c.public_visibility,
+      risk_flags: c.risk_flags,
+      recommended_expression: c.recommended_expression,
+      not_recommended_expression: c.not_recommended_expression,
+      interview_risks: c.interview_risks,
+      role_angle_tags: c.role_angle_tags,
+      reader_lens_tags: c.reader_lens_tags,
     }))
     cardsStr = JSON.stringify(trimmedCards, null, 2)
 
@@ -175,13 +196,6 @@ export async function generateOutputs(caseId: string, forceRegenerate = false, f
   }
 
   // --- JD Fit Gate ---
-  const { data: fitData } = await serviceClient
-    .from("job_fit_assessments")
-    .select("*")
-    .eq("case_id", caseId)
-    .single()
-
-  const fitAssessment = fitData as Record<string, unknown> | null
   if (!fitAssessment) {
     return { success: false, error: "请先完成岗位适配判断" }
   }
@@ -513,6 +527,7 @@ ${cardsStr}
       reason: string
       suggestion: string
       safer_rewrite?: string | null
+      risk_source: string
       status: string
     }> = [
       {
@@ -525,6 +540,7 @@ ${cardsStr}
         reason: `候选人与目标 JD 匹配度为 ${fitLevel}，用户选择继续生成目标 JD 尝试版（forced_target_resume）。存在岗位过度匹配风险。`,
         suggestion: "面试时需诚实说明候选人核心经历方向与目标岗位的关系，强调可迁移能力和转型意愿。",
         safer_rewrite: (fitAssessment?.safe_positioning_statement as string) ?? "基于可迁移能力的职业定位",
+        risk_source: "system_gate",
         status: "open",
       },
       {
@@ -536,6 +552,7 @@ ${cardsStr}
         risk_level: "high",
         reason: `候选人实际经历与目标 JD 方向不同，简历标题不应使用无证据支撑的目标岗位名称。`,
         suggestion: "使用过渡性标题，如'\u201c商业化产品经理\u2502AI 方向探索\u201d'。",
+        risk_source: "system_gate",
         status: "open",
       },
       {
@@ -547,6 +564,7 @@ ${cardsStr}
         risk_level: "high",
         reason: `候选人核心经历与目标 JD 方向存在显著差异，简历中可能出现身份不匹配问题。`,
         suggestion: "确保简历摘要诚实说明转型意愿，不将目标岗位包装为已有身份。",
+        risk_source: "system_gate",
         status: "open",
       },
       {
@@ -558,6 +576,7 @@ ${cardsStr}
         risk_level: "high",
         reason: `目标 JD 可能包含候选人尚不具备的硬性要求（如特定技术栈、行业经验等）。`,
         suggestion: "在简历中诚实呈现现有能力，不编造缺失经验。",
+        risk_source: "system_gate",
         status: "open",
       },
     ]
@@ -573,6 +592,7 @@ ${cardsStr}
       reason: string
       suggestion: string
       safer_rewrite?: string | null
+      risk_source: string
       status: string
     }> = [
       {
@@ -585,6 +605,7 @@ ${cardsStr}
         reason: `候选人与目标 JD 匹配度为 ${fitLevel}，系统推荐交付模式为 ${deliveryMode}。用户选择强制生成正式简历，存在岗位过度匹配风险，可能导致面试时被质疑。`,
         suggestion: "建议使用诊断报告或迁移型简历，诚实呈现可迁移能力而非强行包装为专业经验。",
         safer_rewrite: (fitAssessment?.safe_positioning_statement as string) ?? "基于可迁移能力的职业定位",
+        risk_source: "system_gate",
         status: "open",
       },
     ]
@@ -598,6 +619,7 @@ ${cardsStr}
         risk_level: "high",
         reason: `候选人核心经历与目标 JD 方向存在显著差异，简历中可能出现身份不匹配问题。`,
         suggestion: "确保简历摘要诚实说明转型意愿，不将目标岗位包装为已有身份。",
+        risk_source: "system_gate",
         status: "open",
       })
     }

@@ -281,6 +281,7 @@ export async function auditRisks(caseId: string) {
     .from("risk_issues")
     .delete()
     .eq("case_id", caseId)
+    .eq("risk_source", "llm_audit")
     .eq("status", "open")
 
   const issuesToInsert = dedupedIssues.map((issue) => {
@@ -302,6 +303,7 @@ export async function auditRisks(caseId: string) {
       reason: issue.reason ?? null,
       suggestion: issue.suggestion ?? null,
       safer_rewrite: issue.safer_rewrite ?? null,
+      risk_source: "llm_audit",
       status: "open" as const,
     }
   })

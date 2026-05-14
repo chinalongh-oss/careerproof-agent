@@ -141,10 +141,10 @@ export function OutputsClient({ caseId, candidateName, targetRole, caseStatus, r
     window.location.href = url.toString()
   }, [activeTab])
 
-  async function handleGenerate(forceGenerate = false) {
+  async function handleGenerate(forceRegenerate = false) {
     setGenerating(true)
     try {
-      const result = await generateOutputsAction(caseId, forceGenerate)
+      const result = await generateOutputsAction(caseId, forceRegenerate ? { forceRegenerate: true } : undefined)
       if (result.success) {
         toast.success(result.message || "生成完成")
         reloadPreservingTab()
@@ -161,7 +161,7 @@ export function OutputsClient({ caseId, candidateName, targetRole, caseStatus, r
   async function handleForceGenerate() {
     setForceGenerating(true)
     try {
-      const result = await generateOutputsAction(caseId, true)
+      const result = await generateOutputsAction(caseId, { forceGenerate: true })
       if (result.success) {
         toast.success(result.message || "强制生成完成（已附加风险标记）")
         reloadPreservingTab()
@@ -334,7 +334,7 @@ export function OutputsClient({ caseId, candidateName, targetRole, caseStatus, r
   async function handleMarkDelivered() {
     setMarkingDelivered(true)
     try {
-      const result = await markDeliveredAction(caseId)
+      const result = await markDeliveredAction(caseId, selectedResume?.id)
       if (result.success) {
         toast.success("已标记为已交付")
         window.location.reload()

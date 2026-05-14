@@ -17,12 +17,12 @@ export async function getResumePrintData(caseId: string, outputId?: string): Pro
 
   if (!caseData) return null
 
-  let resume: { id: string; markdown: string | null; version: number; created_at: string } | null = null
+  let resume: { id: string; markdown: string | null; version: number; title: string | null; created_at: string } | null = null
 
   if (outputId) {
     const { data: singleOutput } = await serviceClient
       .from("generated_outputs")
-      .select("id,markdown,version,created_at")
+      .select("id,markdown,version,title,created_at")
       .eq("id", outputId)
       .eq("case_id", caseId)
       .eq("output_type", "resume_markdown")
@@ -34,7 +34,7 @@ export async function getResumePrintData(caseId: string, outputId?: string): Pro
   if (!resume) {
     const { data: outputsData } = await serviceClient
       .from("generated_outputs")
-      .select("id,markdown,version,created_at")
+      .select("id,markdown,version,title,created_at")
       .eq("case_id", caseId)
       .eq("output_type", "resume_markdown")
       .order("version", { ascending: false })
@@ -54,12 +54,21 @@ export async function getResumePrintData(caseId: string, outputId?: string): Pro
 
   const personalInfoRaw = (profileData as Record<string, unknown> | null)?.personal_info as Record<string, unknown> | null
 
+  let resolvedTargetRole = (caseData as Record<string, unknown>).target_role as string | null
+
+  if (resume.title) {
+    const altMatch = resume.title.match(/【替代岗位[：:]\s*(.+?)】/)
+    if (altMatch) {
+      resolvedTargetRole = altMatch[1].trim()
+    }
+  }
+
   const caseFields: CaseContactFields = {
     candidate_name: (caseData as Record<string, unknown>).candidate_name as string | null,
     email: (caseData as Record<string, unknown>).email as string | null,
     wechat: (caseData as Record<string, unknown>).wechat as string | null,
     current_title: (caseData as Record<string, unknown>).current_title as string | null,
-    target_role: (caseData as Record<string, unknown>).target_role as string | null,
+    target_role: resolvedTargetRole,
     target_direction: (caseData as Record<string, unknown>).target_direction as string | null,
   }
 

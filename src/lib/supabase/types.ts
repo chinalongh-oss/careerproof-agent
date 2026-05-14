@@ -152,6 +152,7 @@ export interface RiskIssue {
   reason: string | null
   suggestion: string | null
   safer_rewrite: string | null
+  risk_source: string
   status: RiskIssueStatus
   created_at: string
 }
