@@ -1,21 +1,30 @@
 import "server-only"
 
 import OpenAI from "openai"
-import { createHash } from "node:crypto"
 import * as z from "zod"
 import { serviceClient } from "@/lib/supabase/service"
 import { PROMPT_VERSION } from "@/lib/prompt"
 
-const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY
-const DEEPSEEK_BASE_URL = process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com"
-const DEEPSEEK_MODEL = process.env.DEEPSEEK_MODEL || process.env.OPENAI_MODEL || "deepseek-v4-flash"
+function getDeepseekConfig() {
+  const apiKey = process.env.DEEPSEEK_API_KEY
+  const baseURL = process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com"
+  const model = process.env.DEEPSEEK_MODEL || process.env.OPENAI_MODEL || "deepseek-v4-flash"
+  return { apiKey, baseURL, model }
+}
 
-const deepseek = DEEPSEEK_API_KEY && DEEPSEEK_BASE_URL
-  ? new OpenAI({
-      baseURL: DEEPSEEK_BASE_URL,
-      apiKey: DEEPSEEK_API_KEY,
-    })
-  : null
+function getDeepseekClient(): OpenAI | null {
+  const { apiKey, baseURL } = getDeepseekConfig()
+  if (!apiKey) return null
+  return new OpenAI({ baseURL, apiKey })
+}
+
+async function sha256hex(input: string): Promise<string> {
+  const enc = new TextEncoder()
+  const hash = await crypto.subtle.digest("SHA-256", enc.encode(input) as BufferSource)
+  return Array.from(new Uint8Array(hash))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("")
+}
 
 type GenerationInput = {
   provider: string
@@ -116,22 +125,25 @@ export async function generateStructuredOutput<T extends z.ZodObject<z.ZodRawSha
   temperature?: number
   max_tokens?: number
 }): Promise<{ data: z.infer<T>; run_id: string } | { error: string }> {
+  const cfg = getDeepseekConfig()
+  const deepseek = getDeepseekClient()
+
   if (!deepseek) {
-    if (!DEEPSEEK_API_KEY && !DEEPSEEK_BASE_URL) {
+    if (!cfg.apiKey && !cfg.baseURL) {
       return { error: "AI 服务未配置：DEEPSEEK_API_KEY 和 DEEPSEEK_BASE_URL 环境变量均未设置" }
     }
-    if (!DEEPSEEK_API_KEY) {
+    if (!cfg.apiKey) {
       return { error: "AI 服务未配置：DEEPSEEK_API_KEY 环境变量未设置，请在 .env.local 中配置" }
     }
     return { error: "AI 服务未配置：DEEPSEEK_BASE_URL 环境变量未设置" }
   }
 
-  const model = DEEPSEEK_MODEL
+  const model = cfg.model
   const provider = process.env.LLM_PROVIDER || "deepseek"
   const maxTokens = opts.max_tokens ?? 4096
 
   const userPromptPreview = opts.user_prompt.slice(0, 200)
-  const inputSha256 = createHash("sha256").update(opts.user_prompt).digest("hex")
+  const inputSha256 = await sha256hex(opts.user_prompt)
 
   const inputLog: GenerationInput = {
     provider,

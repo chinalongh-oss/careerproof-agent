@@ -14,7 +14,7 @@ export default async function PrintResumePage({
 }) {
   const cookieStore = await cookies()
   const token = cookieStore.get("admin_token")?.value
-  if (!token || !verifyAdminCookie(token)) {
+  if (!token || !await verifyAdminCookie(token)) {
     return (
       <div style={{
         display: "flex",

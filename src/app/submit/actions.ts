@@ -31,7 +31,6 @@ async function uploadFileToStorage(
 } | null> {
   try {
     const bytes = await file.arrayBuffer()
-    const buffer = Buffer.from(bytes)
     const timestamp = Date.now()
     const ext = file.name.split(".").pop() ?? "bin"
     const storagePath = `${caseId}/${type}_${timestamp}.${ext}`
@@ -39,7 +38,7 @@ async function uploadFileToStorage(
     const mime = mimeTypeFromFile(file)
     const { error: uploadError } = await serviceClient.storage
       .from(MATERIALS_BUCKET)
-      .upload(storagePath, buffer, {
+      .upload(storagePath, bytes, {
         contentType: mime,
         cacheControl: "3600",
       })

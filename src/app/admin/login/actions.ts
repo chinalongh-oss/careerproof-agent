@@ -20,7 +20,7 @@ export async function loginAction(password: string) {
       return { success: false, error: "密码错误" }
     }
 
-    const cookieValue = signAdminCookie()
+    const cookieValue = await signAdminCookie()
     const isProduction = process.env.NODE_ENV === "production"
 
     const cookieStore = await cookies()

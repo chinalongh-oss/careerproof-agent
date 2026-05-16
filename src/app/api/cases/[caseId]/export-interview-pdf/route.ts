@@ -14,7 +14,7 @@ export async function POST(
   const { caseId } = await params
 
   const adminCookieValue = req.cookies.get("admin_token")?.value
-  if (!adminCookieValue || !verifyAdminCookie(adminCookieValue)) {
+  if (!adminCookieValue || !await verifyAdminCookie(adminCookieValue)) {
     return NextResponse.json(
       { ok: false, error: "Unauthorized" },
       { status: 401 }

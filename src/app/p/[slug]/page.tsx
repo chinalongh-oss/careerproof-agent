@@ -35,7 +35,7 @@ export default async function PublicProfilePage({
       return <PublicPagePasswordGate slug={slug} />
     }
 
-    const verified = verifyPageAccessCookie(accessCookie.value, slug, row.password_hash)
+    const verified = await verifyPageAccessCookie(accessCookie.value, slug, row.password_hash)
     if (!verified) {
       return <PublicPagePasswordGate slug={slug} />
     }

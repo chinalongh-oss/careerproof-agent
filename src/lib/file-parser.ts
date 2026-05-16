@@ -1,12 +1,10 @@
 import "server-only"
 
-import pdfParse from "pdf-parse"
-import mammoth from "mammoth"
 import { serviceClient } from "@/lib/supabase/service"
 
 const MATERIALS_BUCKET = "materials"
 
-async function downloadFromStorage(storagePath: string): Promise<Buffer | null> {
+async function downloadFromStorage(storagePath: string): Promise<ArrayBuffer | null> {
   try {
     const { data, error } = await serviceClient.storage
       .from(MATERIALS_BUCKET)
@@ -17,17 +15,17 @@ async function downloadFromStorage(storagePath: string): Promise<Buffer | null> 
       return null
     }
 
-    const arrayBuffer = await data.arrayBuffer()
-    return Buffer.from(arrayBuffer)
+    return await data.arrayBuffer()
   } catch (e) {
     console.error(`[file-parser] download exception: ${e instanceof Error ? e.message : String(e)}`)
     return null
   }
 }
 
-async function extractPdfText(buffer: Buffer): Promise<string | null> {
+async function extractPdfText(data: ArrayBuffer): Promise<string | null> {
   try {
-    const result = await pdfParse(buffer)
+    const pdfParse = (await import("pdf-parse")).default
+    const result = await pdfParse(Buffer.from(data))
     return result.text || null
   } catch (e) {
     console.error(`[file-parser] pdf extraction failed: ${e instanceof Error ? e.message : String(e)}`)
@@ -35,9 +33,10 @@ async function extractPdfText(buffer: Buffer): Promise<string | null> {
   }
 }
 
-async function extractDocxText(buffer: Buffer): Promise<string | null> {
+async function extractDocxText(data: ArrayBuffer): Promise<string | null> {
   try {
-    const result = await mammoth.extractRawText({ buffer })
+    const mammoth = (await import("mammoth")).default
+    const result = await mammoth.extractRawText({ buffer: Buffer.from(data) })
     return result.value || null
   } catch (e) {
     console.error(`[file-parser] docx extraction failed: ${e instanceof Error ? e.message : String(e)}`)
@@ -55,8 +54,8 @@ export async function extractTextFromDocument(
   filePath: string,
   mimeType: string | null
 ): Promise<ExtractResult> {
-  const buffer = await downloadFromStorage(filePath)
-  if (!buffer) {
+  const arrayBuffer = await downloadFromStorage(filePath)
+  if (!arrayBuffer) {
     return {
       rawText: "",
       parseStatus: "failed",
@@ -67,7 +66,7 @@ export async function extractTextFromDocument(
   const mime = mimeType ?? ""
 
   if (mime === "application/pdf") {
-    const text = await extractPdfText(buffer)
+    const text = await extractPdfText(arrayBuffer)
     if (!text || text.trim().length === 0) {
       return {
         rawText: "",
@@ -82,7 +81,7 @@ export async function extractTextFromDocument(
     mime === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
     mime === "application/msword"
   ) {
-    const text = await extractDocxText(buffer)
+    const text = await extractDocxText(arrayBuffer)
     if (!text || text.trim().length === 0) {
       return {
         rawText: "",
@@ -94,7 +93,7 @@ export async function extractTextFromDocument(
   }
 
   if (mime === "text/plain" || mime === "text/markdown" || mime === "text/x-markdown") {
-    const text = buffer.toString("utf-8")
+    const text = new TextDecoder().decode(arrayBuffer)
     if (!text.trim()) {
       return {
         rawText: "",

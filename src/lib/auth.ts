@@ -1,7 +1,5 @@
 import "server-only"
 
-import { createHmac, timingSafeEqual } from "crypto"
-
 const ADMIN_COOKIE_TTL_MS = 24 * 60 * 60 * 1000
 
 function getSecret(): string {
@@ -12,16 +10,38 @@ function getSecret(): string {
   return secret
 }
 
-export function signAdminCookie(): string {
+async function hmacSha256(key: string, data: string): Promise<string> {
+  const enc = new TextEncoder()
+  const keyData = await crypto.subtle.importKey(
+    "raw",
+    enc.encode(key),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
+  )
+  const sig = await crypto.subtle.sign("HMAC", keyData, enc.encode(data))
+  return Array.from(new Uint8Array(sig))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("")
+}
+
+function timingSafeEqualStr(a: string, b: string): boolean {
+  if (a.length !== b.length) return false
+  let result = 0
+  for (let i = 0; i < a.length; i++) {
+    result |= a.charCodeAt(i) ^ b.charCodeAt(i)
+  }
+  return result === 0
+}
+
+export async function signAdminCookie(): Promise<string> {
   const secret = getSecret()
   const issuedAt = Date.now().toString()
-  const signature = createHmac("sha256", secret)
-    .update(`admin:${issuedAt}`)
-    .digest("hex")
+  const signature = await hmacSha256(secret, `admin:${issuedAt}`)
   return `${issuedAt}.${signature}`
 }
 
-export function verifyAdminCookie(cookieValue: string): boolean {
+export async function verifyAdminCookie(cookieValue: string): Promise<boolean> {
   try {
     const secret = getSecret()
     const [issuedAt, signature] = cookieValue.split(".")
@@ -31,40 +51,32 @@ export function verifyAdminCookie(cookieValue: string): boolean {
     if (isNaN(issuedMs)) return false
     if (Date.now() - issuedMs > ADMIN_COOKIE_TTL_MS) return false
 
-    const expected = createHmac("sha256", secret)
-      .update(`admin:${issuedAt}`)
-      .digest("hex")
-
-    return timingSafeEqual(Buffer.from(signature), Buffer.from(expected))
+    const expected = await hmacSha256(secret, `admin:${issuedAt}`)
+    return timingSafeEqualStr(signature, expected)
   } catch {
     return false
   }
 }
 
-export function signPageAccessCookie(slug: string, passwordHash: string): string {
+export async function signPageAccessCookie(slug: string, passwordHash: string): Promise<string> {
   const secret = getSecret()
   const issuedAt = Date.now().toString()
-  const signature = createHmac("sha256", secret)
-    .update(`page:${slug}:${passwordHash}:${issuedAt}`)
-    .digest("hex")
+  const signature = await hmacSha256(secret, `page:${slug}:${passwordHash}:${issuedAt}`)
   return `${issuedAt}.${signature}`
 }
 
-export function verifyPageAccessCookie(
+export async function verifyPageAccessCookie(
   cookieValue: string,
   slug: string,
   passwordHash: string
-): boolean {
+): Promise<boolean> {
   try {
     const secret = getSecret()
     const [issuedAt, signature] = cookieValue.split(".")
     if (!issuedAt || !signature) return false
 
-    const expected = createHmac("sha256", secret)
-      .update(`page:${slug}:${passwordHash}:${issuedAt}`)
-      .digest("hex")
-
-    return timingSafeEqual(Buffer.from(signature), Buffer.from(expected))
+    const expected = await hmacSha256(secret, `page:${slug}:${passwordHash}:${issuedAt}`)
+    return timingSafeEqualStr(signature, expected)
   } catch {
     return false
   }

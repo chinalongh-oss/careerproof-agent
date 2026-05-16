@@ -32,7 +32,7 @@ export async function verifyPublicPagePasswordAction(
       return { success: false, error: "密码错误" }
     }
 
-    const cookieValue = signPageAccessCookie(slug, passwordHash)
+    const cookieValue = await signPageAccessCookie(slug, passwordHash)
     const isProduction = process.env.NODE_ENV === "production"
 
     const cookieStore = await cookies()
