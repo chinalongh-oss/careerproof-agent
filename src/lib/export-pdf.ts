@@ -1,22 +1,17 @@
 import "server-only"
 
+import { createHash } from "crypto"
+import { chromium, BrowserContext } from "playwright"
 import { serviceClient } from "@/lib/supabase/service"
 
 const BUCKET_NAME = "exports"
 
 type ExportPdfResult = {
-  pdfBuffer: Uint8Array
+  pdfBuffer: Buffer
   sha256: string
   storagePath: string
   signedUrl: string
   artifactId: string
-}
-
-async function sha256hex(input: Uint8Array): Promise<string> {
-  const hash = await crypto.subtle.digest("SHA-256", input as BufferSource)
-  return Array.from(new Uint8Array(hash))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("")
 }
 
 export async function exportHtmlToPdf(options: {
@@ -31,14 +26,14 @@ export async function exportHtmlToPdf(options: {
 }): Promise<{ ok: true; result: ExportPdfResult } | { ok: false; error: string }> {
   const { caseId, printUrl, adminCookie, artifactType, sourceOutputId, templateVersion, schemaVersion, appUrl } = options
 
-  let pdfBytes: Uint8Array
+  let pdfBuffer: Buffer
 
   try {
-    const playwright = await import("playwright")
-    const browser = await playwright.chromium.launch({ headless: true })
+    const browser = await chromium.launch({ headless: true })
+    let context: BrowserContext
 
     try {
-      const context = await browser.newContext()
+      context = await browser.newContext()
 
       if (adminCookie) {
         await context.addCookies([
@@ -48,7 +43,7 @@ export async function exportHtmlToPdf(options: {
             domain: new URL(appUrl).hostname,
             path: "/",
             httpOnly: true,
-            sameSite: "Lax" as const,
+            sameSite: "Lax",
           },
         ])
       }
@@ -60,7 +55,7 @@ export async function exportHtmlToPdf(options: {
         await page.waitForSelector('[data-render-ready="true"]', { timeout: 15000 })
         await page.evaluate(() => document.fonts.ready)
 
-        pdfBytes = new Uint8Array(
+        pdfBuffer = Buffer.from(
           await page.pdf({
             format: "A4",
             printBackground: true,
@@ -94,14 +89,14 @@ export async function exportHtmlToPdf(options: {
     return { ok: false, error: `Playwright 启动失败：${message}` }
   }
 
-  const sha256 = await sha256hex(pdfBytes)
+  const sha256 = createHash("sha256").update(pdfBuffer).digest("hex")
   const timestamp = Date.now()
   const prefix = artifactType === "resume_pdf" ? "resume" : "interview"
   const storagePath = `${prefix}/${caseId}/${timestamp}.pdf`
 
   const { error: uploadError } = await serviceClient.storage
     .from(BUCKET_NAME)
-    .upload(storagePath, pdfBytes, {
+    .upload(storagePath, pdfBuffer, {
       contentType: "application/pdf",
       cacheControl: "3600",
     })
@@ -146,7 +141,7 @@ export async function exportHtmlToPdf(options: {
   return {
     ok: true,
     result: {
-      pdfBuffer: pdfBytes,
+      pdfBuffer,
       sha256,
       storagePath,
       signedUrl: signedUrlData.signedUrl,
